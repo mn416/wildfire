@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<system name="$${FILENAME}">
+ <component
+   name="$${FILENAME}"
+   displayName="$${FILENAME}"
+   version="1.0"
+   description=""
+   tags=""
+   categories="System" />
+ <parameter name="bonusData"><![CDATA[bonusData 
+{
+   element SolverTop_0
+   {
+      datum _sortIndex
+      {
+         value = "2";
+         type = "int";
+      }
+   }
+   element clk
+   {
+      datum _sortIndex
+      {
+         value = "0";
+         type = "int";
+      }
+   }
+   element jtag_uart
+   {
+      datum _sortIndex
+      {
+         value = "1";
+         type = "int";
+      }
+   }
+}
+]]></parameter>
+ <parameter name="clockCrossingAdapter" value="FIFO" />
+ <parameter name="device" value="5SGXEA7N2F45C2" />
+ <parameter name="deviceFamily" value="Stratix V" />
+ <parameter name="deviceSpeedGrade" value="2_H2" />
+ <parameter name="fabricMode" value="QSYS" />
+ <parameter name="generateLegacySim" value="false" />
+ <parameter name="generationId" value="0" />
+ <parameter name="globalResetBus" value="false" />
+ <parameter name="hdlLanguage" value="VERILOG" />
+ <parameter name="hideFromIPCatalog" value="false" />
+ <parameter name="lockedInterfaceDefinition" value="" />
+ <parameter name="maxAdditionalLatency" value="4" />
+ <parameter name="projectName" value="Golden_top.qpf" />
+ <parameter name="sopcBorderPoints" value="false" />
+ <parameter name="systemHash" value="0" />
+ <parameter name="testBenchDutName" value="" />
+ <parameter name="timeStamp" value="0" />
+ <parameter name="useTestBenchNamingPattern" value="false" />
+ <instanceScript></instanceScript>
+ <interface name="clk" internal="clk.clk_in" type="clock" dir="end" />
+ <interface name="reset" internal="clk.clk_in_reset" type="reset" dir="end" />
+ <module name="SolverTop_0" kind="SolverTop" version="1.0" enabled="1" />
+ <module name="clk" kind="clock_source" version="16.0" enabled="1">
+  <parameter name="clockFrequency" value="100000000" />
+  <parameter name="clockFrequencyKnown" value="true" />
+  <parameter name="inputClockFrequency" value="0" />
+  <parameter name="resetSynchronousEdges" value="NONE" />
+ </module>
+ <module
+   name="jtag_uart"
+   kind="altera_avalon_jtag_uart"
+   version="16.0"
+   enabled="1">
+  <parameter name="allowMultipleConnections" value="false" />
+  <parameter name="avalonSpec" value="2.0" />
+  <parameter name="clkFreq" value="100000000" />
+  <parameter name="hubInstanceID" value="0" />
+  <parameter name="readBufferDepth" value="64" />
+  <parameter name="readIRQThreshold" value="8" />
+  <parameter name="simInputCharacterStream" value="" />
+  <parameter name="simInteractiveOptions">NO_INTERACTIVE_WINDOWS</parameter>
+  <parameter name="useRegistersForReadBuffer" value="false" />
+  <parameter name="useRegistersForWriteBuffer" value="false" />
+  <parameter name="useRelativePathForSimFile" value="false" />
+  <parameter name="writeBufferDepth" value="64" />
+  <parameter name="writeIRQThreshold" value="8" />
+ </module>
+ <connection
+   kind="avalon"
+   version="16.0"
+   start="SolverTop_0.avalon_master"
+   end="jtag_uart.avalon_jtag_slave">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x0000" />
+  <parameter name="defaultConnection" value="false" />
+ </connection>
+ <connection kind="clock" version="16.0" start="clk.clk" end="jtag_uart.clk" />
+ <connection kind="clock" version="16.0" start="clk.clk" end="SolverTop_0.clock" />
+ <connection
+   kind="reset"
+   version="16.0"
+   start="clk.clk_reset"
+   end="jtag_uart.reset" />
+ <connection
+   kind="reset"
+   version="16.0"
+   start="clk.clk_reset"
+   end="SolverTop_0.reset" />
+ <interconnectRequirement for="$system" name="qsys_mm.clockCrossingAdapter" value="FIFO" />
+ <interconnectRequirement for="$system" name="qsys_mm.maxAdditionalLatency" value="4" />
+</system>
