@@ -23,7 +23,7 @@ plt.gcf().subplots_adjust(bottom=0.15)
 plt.xlim([0,650])
 plt.ylim([0,800])
 
-plt.ylabel("Time (s)", fontsize=9)
+plt.ylabel("Speedup", fontsize=9)
 plt.xlabel("Processors", fontsize=9)
 
 bfly, = plt.plot(Xs[1][0:], Ys[1][0:], 'k.-', label="Butterfly")
