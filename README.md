@@ -67,7 +67,6 @@ Here are the results for an 18-Queens solver on a DE5-NET FPGA:
 
   Metric       | Value
   ------------ | ------------------
-
   Processors   | 512
   Topology     | 64x8 butterfly
   Frequency    | 200MHz
