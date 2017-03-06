@@ -466,7 +466,6 @@ Wrapped butterfly network (radix 2).
 >     nodes = [[width*i .. width*i+(width-1)] | i <- [0..n-1]]
 >     edges = bfly (nodes ++ [head nodes])
 >     neighbours node = nub
->                     $ List.filter (node /=)
 >                     $ [y | (x, y) <- edges, x == node]
 >                    ++ [x | (x, y) <- edges, y == node]
 
@@ -487,6 +486,24 @@ Wrapped butterfly network (radix 2).
 > half xs = splitAt n xs
 >   where n = length xs `div` 2
 
+Wrapped repeated butterfly network (radix 2).
+
+> wavefly :: Int -> Int -> Network
+> wavefly n d =
+>     fromList [(node, neighbours node) | node <- nub (concat nodes)]
+>   where
+>     width = 2^n
+>     nodes = transpose
+>           $ take width [[d*i .. d*i+(d-1)] | i <- [0..]]
+>     edges = wave (head nodes) nodes
+>     neighbours node = nub
+>                     $ [y | (x, y) <- edges, x == node]
+>                    ++ [x | (x, y) <- edges, y == node]
+>     wave firstRow rows
+>       | length rows <= n   = bfly (rows ++ [firstRow])
+>       | otherwise          = bfly block ++ wave firstRow (last block:rest)
+>       where (block, rest)  = splitAt (n+1) rows
+
 Top-level compiler
 ==================
 
@@ -496,6 +513,13 @@ Top-level compiler
 >           -- translate (mesh 25 25)
 >           -- translate (mesh 17 18)
 >           -- translate (torus 10 10)
->           translate (torus 25 25)
+>           -- translate (torus 25 25)
+>           -- translate (butterfly 6)
+>           -- translate (wavefly 6 8)
+>           -- translate (butterfly 4)
+>           -- translate (torus 12 12)
+>           -- translate (torus 8 8)
+>           -- translate (mesh 1 1)
+>           translate (wavefly 6 8)
 >         . annotateLive
 >         . typeCheck

@@ -67,12 +67,15 @@ Here are the results for an 18-Queens solver on a DE5-NET FPGA:
 
   Metric       | Value
   ------------ | ------------------
-  Processors   | 625
-  Topology     | 25x25 torus
+
+  Processors   | 512
+  Topology     | 64x8 butterfly
   Frequency    | 200MHz
-  Logic (ALMs) | 190K (81%)
-  BRAMs        | 11.5Mbit (22%)
-  Runtime      | 11.4s
+  Logic (ALMs) | 157K (67%)
+  BRAMs        | 9.4Mbit (18%)
+  Runtime      | 9.7s
 
 A C++ version of the program running on a 2.6GHz Intel Core i7-6770HQ
-takes 548s. (And it didn't parallelise well using GCC Cilk.)
+takes 548s. (It didn't parallelise well using GCC Cilk.)
+
+(More results [here](doc).)
