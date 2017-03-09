@@ -26,8 +26,13 @@ prettyType (TLab labs)  = text "label" <+> text "=" <+> text (show labs)
 prettyType TLock        = text "lock"
 prettyType (TRam aw dw) = text "ram" <+> text (show aw) <+> text (show dw)
 
-prettyDecl :: (Id, Type) -> Doc
-prettyDecl (v, ty) = text v <+> char ':' <+> prettyType ty
+prettyDecl :: Decl -> Doc
+prettyDecl (Decl v ty init) =
+  text v <+> char ':' <+> prettyType ty <+> prettyInit init
+
+prettyInit :: Init -> Doc
+prettyInit (Uninit) = text ""
+prettyInit (IntInit i) = char '=' <+> text (show i)
 
 prettyStm :: Stm -> Doc
 prettyStm Skip = text "skip"

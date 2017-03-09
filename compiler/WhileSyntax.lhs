@@ -5,7 +5,7 @@ Hardware Compilation of the While Language
 
 > import Descend
 > import Control.Monad
-> import PageSyntax (UnaryOp(..), BinOp(..))
+> import PageSyntax (UnaryOp(..), BinOp(..), Init)
 
 A program consists of identifier declarations and a statement.
 
@@ -17,7 +17,13 @@ A program consists of identifier declarations and a statement.
 
 A declaration associates an identifier with a type.
 
-> type Decl = (Id, Type)
+> data Decl =
+>   Decl {
+>     declId   :: Id
+>   , declType :: Type
+>   , declInit :: Init
+>   }
+>   deriving Show
 
 > type Id = String
 

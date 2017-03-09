@@ -1,7 +1,7 @@
 module WhileParser (parseProgFile) where
 
 import WhileSyntax
-import PageSyntax (UnaryOp(..), BinOp(..))
+import PageSyntax (UnaryOp(..), BinOp(..), Init(..))
 import Control.Applicative
 import Control.Monad
 import Data.Char
@@ -109,7 +109,14 @@ declarations :: Parser [Decl]
 declarations = decl `sepEndBy` comma
 
 decl :: Parser Decl
-decl = pure (,) <*> (identifier <* reserved ":") <*> typ
+decl = pure Decl <*> (identifier <* reserved ":") <*> typ <*> initial
+
+initial :: Parser Init
+initial =
+  do m <- optionMaybe (reserved "=" *> natural)
+     case m of
+       Nothing -> return Uninit
+       Just i  -> return (IntInit i)
 
 typ :: Parser Type
 typ = pure TNat <*> nat

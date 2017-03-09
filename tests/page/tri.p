@@ -11,12 +11,12 @@ in
 
   #begin:
 
-    if n == 0 then goto #end else skip ;
+    if n == 0 then goto #out else skip end ;
     x := x + n ;
     n := n - 1 ;
     tick ;
     goto #begin ;
 
-  #end:
+  #out:
 
   print x

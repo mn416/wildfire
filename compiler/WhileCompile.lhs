@@ -20,9 +20,9 @@ Return the resulting program, throwing an error message if not
 well-typed.  This function is not efficient.
 
 > typeCheck :: Prog -> Prog
-> typeCheck p = p { code = tc (code p) }
+> typeCheck p = p { decls = List.map tcDecl (decls p), code = tc (code p) }
 >   where
->     env  = Map.fromList (decls p)
+>     env  = Map.fromList [(v, t) | Decl v t _ <- decls p]
 >
 >     typeError x = error ("Type error (" ++ x ++ ")")
 >     typeErrorW x w = error ("Type error (" ++ x
@@ -67,6 +67,13 @@ well-typed.  This function is not efficient.
 >     tc Fail = Fail
 >     tc Halt = Halt
 >     tc other = typeError (show other)
+>
+>     -- Type checker for declarations
+>     tcDecl d =
+>       case d of
+>         Decl v (TNat n) (P.IntInit i) -> d
+>         Decl v _ (P.IntInit i) -> typeError ("bad type for variable " ++ v)
+>         other -> other
 
 Static restrictions
 ===================
@@ -322,12 +329,13 @@ barring different instances of variable names.)
 >                 P.Tick, P.Jump ("_backtrack"  # i) ]
 >
 >     trDecls :: [Decl] -> [P.Decl]
->     trDecls ds = [(v # i, P.TNat n) | (v, TNat n) <- ds]
->               ++ [("_stack" # i, P.TRam 10 20)]
->               ++ [("_ret" # i, P.TLab [])]
->               ++ [("_emit" # i, P.TNat 1)]
->               ++ [ ("_token" # i, P.TNat (length neighbours))
->                  | length neighbours > 0 ]
+>     trDecls ds =
+>         [P.Decl (v # i) (P.TNat n) init | Decl v (TNat n) init <- ds]
+>      ++ [P.Decl ("_stack" # i) (P.TRam 10 20) P.Uninit]
+>      ++ [P.Decl ("_ret" # i) (P.TLab []) P.Uninit]
+>      ++ [P.Decl ("_emit" # i) (P.TNat 1) P.Uninit]
+>      ++ [P.Decl ("_token" # i) (P.TNat (length neighbours)) P.Uninit
+>         | length neighbours > 0]
 >
 >     par [] = P.Skip
 >     par ss = P.Par ss
@@ -409,14 +417,14 @@ of nodes.)
 >          ++ [ P.Tick, P.Jump "_output" ]
 >          
 >     -- Declarations for entire program
->     ds = [ ("_count", P.TNat 32)
->          , ("_started", P.TNat 1)
->          , ("_initial_lock", P.TNat 1)
->          , ("_done_count", P.TNat 20) 
->          , ("_startbyte", P.TNat 8) ]
->       ++ [ ("_lock" # i, P.TLock) | i <- [0..n-1] ]
->       ++ [ ("_emit_bus" # i, P.TNat 1) | i <- [0..n] ]
->       ++ [ ("_done" # i, P.TNat 1) | i <- [0..n] ]
+>     ds = [ P.Decl ("_count") (P.TNat 32) P.Uninit
+>          , P.Decl ("_started") (P.TNat 1) P.Uninit
+>          , P.Decl ("_initial_lock") (P.TNat 1) P.Uninit
+>          , P.Decl ("_done_count") (P.TNat 20) P.Uninit
+>          , P.Decl "_startbyte" (P.TNat 8) P.Uninit ]
+>       ++ [ P.Decl ("_lock" # i) (P.TLock) P.Uninit | i <- [0..n-1] ]
+>       ++ [ P.Decl ("_emit_bus" # i) (P.TNat 1) P.Uninit | i <- [0..n] ]
+>       ++ [ P.Decl ("_done" # i) (P.TNat 1) P.Uninit | i <- [0..n] ]
 >       ++ concatMap P.decls ps
 
 > (#) :: String -> Int -> String

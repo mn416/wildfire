@@ -70,14 +70,14 @@ label variable v is assigned to a label variable w then v and w have
 the same label type.
 
 > inferLabelTypes :: Prog -> Prog
-> inferLabelTypes p = p { decls = [augment d | d <- decls p] }
+> inferLabelTypes p = p { decls = List.map augment (decls p) }
 >   where
->     augment (v, TLab _) = (v, TLab (mapping!v))
->     augment (v, t)      = (v, t)
+>     augment (Decl v (TLab _) init) = Decl v (TLab (mapping!v)) init
+>     augment other = other
 >
 >     mapping = Map.map sort $ fix (propagate indirect) direct
 >
->     labelVars = [v | (v, TLab _) <- decls p]
+>     labelVars = [v | Decl v (TLab _) _ <- decls p]
 >
 >     direct = fromListWith List.union (dir (code p))
 >       where
@@ -124,14 +124,14 @@ a set of variables which the pointer may point to.  If a pointer p is
 assigned to a pointer q then p and q have the same pointer type.
 
 > inferPointerTypes :: Prog -> Prog
-> inferPointerTypes p = p { decls = [augment d | d <- decls p] }
+> inferPointerTypes p = p { decls = List.map augment (decls p) }
 >   where
->     augment (v, TPtr n _) = (v, TPtr n (mapping!v))
->     augment (v, t)        = (v, t)
+>     augment (Decl v (TPtr n _) init) = Decl v (TPtr n (mapping!v)) init
+>     augment other = other
 >
 >     mapping = Map.map sort $ fix (propagate indirect) direct
 >
->     ptrVars = [v | (v, TPtr _ _) <- decls p]
+>     ptrVars = [v | Decl v (TPtr _ _) _ <- decls p]
 >
 >     direct = fromListWith List.union (dir (code p))
 >       where
@@ -180,8 +180,8 @@ These can be defined in terms of other constructs:
 
 > printDecls :: [Decl]
 > printDecls =
->   [ ("reg_dataToSend", TNat 8)
->   , ("reg_send", TNat 1)
+>   [ Decl "reg_dataToSend" (TNat 8) (IntInit 0)
+>   , Decl "reg_send" (TNat 1) (IntInit 0)
 >   ]
 
 Print a byte (a bit-string 8 bits)
@@ -287,14 +287,14 @@ Desguar all Push and Pop statements into other constructs.
 
 > desugarStacks :: Prog -> Prog
 > desugarStacks p =
->   p { decls = decls p ++ concat [ [ (m ++ "_sp" , TNat aw)
->                                   , (m ++ "_top" , TNat dw) ]
->                                  | (m, TRam aw dw) <- decls p ]
+>   p { decls = decls p ++ concat [ [ Decl (m ++ "_sp") (TNat aw) (IntInit 0)
+>                                   , Decl (m ++ "_top") (TNat dw) (IntInit 0) ]
+>                                  | Decl m (TRam aw dw) _ <- decls p ]
 >     , code  = trStm (code p)
 >            :> Halt
 >            :> foldr (:>) Skip
 >                 [ pushOneCode aw s :> popOneCode aw s
->                 | (s, TRam aw dw) <- decls p ]
+>                 | Decl s (TRam aw dw) _ <- decls p ]
 >     }
 >   where
 >     trStm (Push s x) = pushChunks s x
@@ -324,10 +324,11 @@ Desguar all Push and Pop statements into other constructs.
 > 
 >     -- Determine the data width of a register or RAM in a program.
 >     getWidth :: Id -> Int
->     getWidth x = hd $ [w | (v, TRam _ w) <- decls p, v == x]
->                    ++ [w | (v, TNat w) <- decls p, v == x]
->                    ++ [length labs | (v, TLab labs) <- decls p, v == x]
->                    ++ [length regs | (v, TPtr _ regs) <- decls p, v == x]
+>     getWidth x =
+>       hd $ [w | Decl v (TRam _ w) _ <- decls p, v == x]
+>         ++ [w | Decl v (TNat w) _ <- decls p, v == x]
+>         ++ [length labs | Decl v (TLab labs) _ <- decls p, v == x]
+>         ++ [length regs | Decl v (TPtr _ regs) _ <- decls p, v == x]
 >       where
 >         hd (x:xs) = x
 >         hd other  = error ("Can't determine width of variable " ++ x)
@@ -348,12 +349,12 @@ Create a signal (of the correct width) for each identifier:
 >      let m = zip [v | (v, n) <- ps] sigs
 >      setupIO (fromList m)
 >   where
->     ps = [(v, n) | (v, TNat n) <- decls p]
->       ++ [(v, length labs) | (v, TLab labs) <- decls p]
->       ++ [(v, length regs) | (v, TPtr _ regs) <- decls p]
->       ++ [(v, 1) | (v, TLock) <- decls p]
+>     ps = [(v, n) | Decl v (TNat n) _ <- decls p]
+>       ++ [(v, length labs) | Decl v (TLab labs) _ <- decls p]
+>       ++ [(v, length regs) | Decl v (TPtr _ regs) _ <- decls p]
+>       ++ [(v, 1) | Decl v TLock _ <- decls p]
 >       ++ [(v, 1) | v <- labels p]
->       ++ [(v, dw) | (v, TRam aw dw) <- decls p]
+>       ++ [(v, dw) | Decl v (TRam aw dw) _ <- decls p]
 
 An item of a schedule describes an action to be performed on an
 identifier at a specified point in time.  It is is a pair containing a
@@ -378,8 +379,8 @@ Compile a statement to give a schedule.
 >      (done, sched) <- compStm start (code p)
 >      return sched
 >   where
->   labelTypes = fromList [(v, labs) | (v, TLab labs) <- decls p]
->   ptrTypes = fromList [(v, regs) | (v, TPtr _ regs) <- decls p]
+>   labelTypes = fromList [(v, labs) | Decl v (TLab labs) _ <- decls p]
+>   ptrTypes = fromList [(v, regs) | Decl v (TPtr _ regs) _ <- decls p]
 > 
 >   compStm :: Sig -> Stm -> Lava (Sig, Schedule)
 >   compStm go Skip = return (go, [])
@@ -541,15 +542,17 @@ loops may exists from a signal back to itself.)
 >      -- Drive lock-related signals
 >      sequence_ [lock l | l <- locks]
 >   where
->     regs = [v | (v, TNat n)   <- decls p]
->         ++ [v | (v, TLab _)   <- decls p]
->         ++ [v | (v, TPtr _ _) <- decls p]
->     reg r 
+>     regs = [(v, init) | Decl v (TNat n) init <- decls p]
+>         ++ [(v, init) | Decl v (TLab _) init <- decls p]
+>         ++ [(v, init) | Decl v (TPtr _ _) init <- decls p]
+>     reg (r, init)
 >       | List.null assigns = return ()
 >       | otherwise =
 >           do regIn <- mux assigns
 >              enable <- orBits [go | (go, x) <- assigns]
->              out <- delayEn enable regIn
+>              out <- case init of
+>                       IntInit i -> delayInitEn i enable regIn
+>                       Uninit -> delayEn enable regIn
 >              (env!r) <== out
 >       where assigns = [(go, x) | (go, AssignReg v x) <- s, v == r]
 >
@@ -558,7 +561,7 @@ loops may exists from a signal back to itself.)
 >       do trig <- orBits [go | (go, JumpToLabel v) <- s, v == l]
 >          (env!l) <== trig
 >
->     rams = [v | (v, TRam _ _) <- decls p]
+>     rams = [v | Decl v (TRam _ _) _ <- decls p]
 >     ram r =
 >       do readEn  <- orBits [go | (go, _) <- reads]
 >          writeEn <- orBits [go | (go, _, _) <- writes]
@@ -572,7 +575,7 @@ loops may exists from a signal back to itself.)
 >         reads  = [(go, i) | (go, LoadRam r1 i) <- s, r == r1]
 >         writes = [(go, i, x) | (go, StoreRam r1 i x) <- s, r == r1]
 >
->     locks = [v | (v, TLock) <- decls p]
+>     locks = [v | Decl v TLock _ <- decls p]
 >     lock l =
 >         do invTaken <- inv taken
 >            asks <- sequence [invTaken <&> ask | (ask, _, _) <- grabs]
@@ -610,9 +613,9 @@ Return the resulting program, throwing an error message if not
 well-typed.  This function is not efficient.
 
 > typeCheck :: Prog -> Prog
-> typeCheck p = p { code = tc (code p) }
+> typeCheck p = p { decls = List.map tcDecl (decls p), code = tc (code p) }
 >   where
->     env  = Map.fromList (decls p)
+>     env  = Map.fromList [(declId d, declType d) | d <- decls p]
 >     labs = labels p
 >
 >     typeError x = error ("Type error (" ++ x ++ ")")
@@ -719,6 +722,13 @@ well-typed.  This function is not efficient.
 >     tc (Pop s x) = Pop s x
 >     tc Halt = Halt
 >     tc other = typeError (show other)
+>
+>     tcDecl d = 
+>       case d of
+>         Decl v (TNat n) (IntInit _) -> d
+>         Decl v t (IntInit _) ->
+>           typeError ("bad initialiser for variable " ++ v)
+>         other -> other
 
 > isNat :: Type -> Bool
 > isNat (TNat _) = True

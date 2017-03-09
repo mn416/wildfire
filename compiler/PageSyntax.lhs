@@ -12,14 +12,19 @@ compile Occam to hardware.
 A program consists of identifier declarations and a statement.
 
 > data Prog = 
->   Prog { decls      :: [Decl]
->        , code       :: Stm
+>   Prog { decls   :: [Decl]
+>        , code    :: Stm
 >        }
 >     deriving Show
 
 A declaration associates an identifier with a type.
 
-> type Decl = (Id, Type)
+> data Decl =
+>   Decl { declId   :: Id
+>        , declType :: Type
+>        , declInit :: Init
+>        }
+>     deriving Show
 
 > type Id = String
 
@@ -32,6 +37,11 @@ A declaration associates an identifier with a type.
 >     deriving (Eq, Show)
 
 > type Width = Int
+
+> data Init =
+>     Uninit                 {- Uninitialised -}
+>   | IntInit Integer        {- Initialised to integer -}
+>   deriving Show
 
 Statements.
 

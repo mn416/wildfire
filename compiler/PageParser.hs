@@ -105,7 +105,7 @@ stmt'  = pure Skip <* reserved "skip"
      <|> pure Ifte <*> (reserved "if" *> expr)
                    <*> (reserved "then" *> stmt')
                    <*> (reserved "else" *> stmt' <*
-                           reserved "end" <* reserved "if")
+                           reserved "end")
      <|> pure While <*> (reserved "while" *> expr) <*>
            (stmt' <* reserved "end" <* reserved "while")
      <|> pure (\l s -> Label l :> s) <*> (stmtLabel <* reservedOp ":")
@@ -141,7 +141,14 @@ declarations :: Parser [Decl]
 declarations = decl `sepEndBy` comma
 
 decl :: Parser Decl
-decl = pure (,) <*> (var <* reserved ":") <*> typ
+decl = pure Decl <*> (var <* reserved ":") <*> typ <*> initial
+
+initial :: Parser Init
+initial =
+  do m <- optionMaybe (reserved "=" *> natural)
+     case m of
+       Nothing -> return Uninit
+       Just i  -> return (IntInit i)
 
 typ :: Parser Type
 typ = pure TNat <*> (reserved "nat" *> nat)
