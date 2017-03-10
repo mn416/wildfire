@@ -527,7 +527,8 @@ Top-level compiler
 >           -- translate (butterfly 4)
 >           -- translate (torus 12 12)
 >           -- translate (torus 8 8)
->           -- translate (mesh 1 1)
->           translate (wavefly 6 8)
+>           translate (mesh 1 1)
+>           --translate (wavefly 6 8)
 >         . annotateLive
 >         . typeCheck
+>         . staticRestrictions
