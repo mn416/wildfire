@@ -6,12 +6,14 @@ Hardware Compilation of the While Language
 > import Descend
 > import Control.Monad
 > import PageSyntax (UnaryOp(..), BinOp(..), Init)
+> import qualified Data.Map as Map
 
 A program consists of identifier declarations and a statement.
 
 > data Prog = 
->   Prog { decls      :: [Decl]
->        , code       :: Stm
+>   Prog { opts  :: CompilerOpts
+>        , decls :: [Decl]
+>        , code  :: Stm
 >        }
 >     deriving Show
 
@@ -32,6 +34,8 @@ A declaration associates an identifier with a type.
 >     deriving (Eq, Show)
 
 > type Width = Int
+
+> type CompilerOpts = Map.Map String Integer
 
 Statements.
 

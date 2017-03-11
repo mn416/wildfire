@@ -6,24 +6,25 @@ wildfire program that solves the
 [N-Queens](https://en.wikipedia.org/wiki/Eight_queens_puzzle) problem:
 
 ```ada
-declare
-    -- Set the widths to N to solve N-Queens
-    poss : 8,  -- Possible positions of queen on current row
-    l    : 8,  -- Squares attacked on current row due to left-diagonal
-    r    : 8,  -- " due to right-diagonal
-    d    : 8,  -- " due to column
-    bit  : 8   -- Choice of queen position on current row
-in
-    poss := ~0 ;
-    while poss /= 0 do
-      bit := poss & (~poss + 1) ;
-         ( l := (l|bit) << 1
-        || r := (r|bit) >> 1
-        || d := d|bit
-         ; poss := ~(l|r|d) )
-      ?  ( poss := poss & ~bit )
-    end ;
-    if d == ~0 then halt else fail end
+-- Set the widths to N to solve N-Queens
+var poss : 8  -- Possible positions of queen on current row
+var l    : 8  -- Squares attacked on current row due to left-diagonal
+var r    : 8  -- " due to right-diagonal
+var d    : 8  -- " due to column
+var bit  : 8  -- Choice of queen position on current row
+
+begin
+  poss := ~0 ;
+  while poss /= 0 do
+    bit := poss & (~poss + 1) ;
+       ( l := (l|bit) << 1
+      || r := (r|bit) >> 1
+      || d := d|bit
+       ; poss := ~(l|r|d) )
+    ?  ( poss := poss & ~bit )
+  end ;
+  if d == ~0 then halt else fail end
+end
 ```
 
 The source language supports sequential composition (`;`), parallel
@@ -31,7 +32,7 @@ composition (`||`), loops (`while`), conditionals (`if`),
 non-deterministic choice (`?`), success (`halt`), and failure
 (`fail`).
 
-The compiler works by creating *n* instances of the program (which we
+The compiler works by creating many instances of the program (which we
 call *processors*) on FPGA, connected according to a topology
 specified at compile-time.
 
@@ -75,6 +76,6 @@ Here are the results for an 18-Queens solver on a DE5-NET FPGA:
   Runtime      | 9.7s
 
 A C++ version of the program running on a 2.6GHz Intel Core i7-6770HQ
-takes 548s. (It didn't parallelise well using GCC Cilk.)
+takes 548s. (But didn't parallelise well using GCC Cilk.)
 
-(More results [here](doc).)
+More results [here](doc/timings.md).

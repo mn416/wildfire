@@ -9,6 +9,7 @@ import Text.ParserCombinators.Parsec hiding (many, option, (<|>))
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as T
+import qualified Data.Map as Map
   
 page = T.makeTokenParser $ emptyDef
   { commentLine      = "--"
@@ -18,7 +19,8 @@ page = T.makeTokenParser $ emptyDef
   , opStart          = opLetter haskellStyle
   , opLetter         = oneOf "+-*/=<>;:|@.^~?"
   , reservedNames    = ["skip", "if", "then", "else", "end",
-                        "while", "declare", "in", "fail", "halt"]
+                        "while", "declare", "in", "fail", "halt",
+                        "opt", "var"]
   , caseSensitive    = True
   }
   
@@ -36,6 +38,7 @@ operator = T.operator page
 charLiteral = T.charLiteral page
 stringLiteral = T.stringLiteral page
 lexeme = T.lexeme page
+whitespace = T.whiteSpace page
 
 -- Expressions
 
@@ -105,11 +108,10 @@ ifStmt =
 
 -- Declarations
 
-declarations :: Parser [Decl]
-declarations = decl `sepEndBy` comma
-
 decl :: Parser Decl
-decl = pure Decl <*> (identifier <* reserved ":") <*> typ <*> initial
+decl = pure Decl <*> (reserved "var" *> identifier <* reserved ":")
+                 <*> typ
+                 <*> initial
 
 initial :: Parser Init
 initial =
@@ -126,12 +128,40 @@ nat = pure fromIntegral <*> natural
 
 log2 :: Integral a => a -> a
 log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
-    
+ 
+-- Parse a compiler option
+
+compilerOpt :: Parser CompilerOpts
+compilerOpt =
+  do reserved "opt"
+     key <- identifier
+     reserved "="
+     val <- natural
+     return (Map.fromList [(key, val)])
+
+-- Parse program prelude
+
+prelude :: Parser (CompilerOpts, [Decl])
+prelude =
+  do items <- many preludeItem
+     let (opts, decls) = unzip items
+     return (Map.unions opts, concat decls)
+
+preludeItem :: Parser (CompilerOpts, [Decl])
+preludeItem =
+      do { o <- compilerOpt ; return (o, []) }
+  <|> do { d <- decl ; return (Map.empty, [d]) }
+
 -- Programs
 
 prog :: Parser Prog
-prog = pure Prog <*> (reserved "declare" *> declarations)
-                 <*> (reserved "in" *> stmt)
+prog =
+  do whitespace
+     (opts, ds) <- prelude
+     reserved "begin"
+     s <- stmt
+     reserved "end"
+     return (Prog opts ds s)
  
 parseProgFile :: SourceName -> IO Prog
 parseProgFile f = parseFromFile (prog <* eof) f >>= \result ->

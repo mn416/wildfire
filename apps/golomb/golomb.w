@@ -1,12 +1,9 @@
-declare
+-- Search for 10 mark ruler of max length 55
+var list  : 55 = 0x40000000000000
+var diffs : 55 = 0
+var marks : 5  = 1
 
-  -- Search for 10 mark ruler of max length 55
-  list  : 55 = 0x40000000000000,
-  diffs : 55 = 0,
-  marks : 5  = 1
-
-in
-
+begin
   while 1 do
     if marks == 10 then halt end ;
     if (list & 1) == 1 then fail end ;
@@ -19,3 +16,4 @@ in
          marks := marks + 1)
     end
   end
+end
