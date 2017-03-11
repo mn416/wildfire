@@ -158,9 +158,7 @@ prog :: Parser Prog
 prog =
   do whitespace
      (opts, ds) <- prelude
-     reserved "begin"
      s <- stmt
-     reserved "end"
      return (Prog opts ds s)
  
 parseProgFile :: SourceName -> IO Prog

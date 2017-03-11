@@ -331,7 +331,7 @@ barring different instances of variable names.)
 >     trDecls :: [Decl] -> [P.Decl]
 >     trDecls ds =
 >         [P.Decl (v # i) (P.TNat n) init | Decl v (TNat n) init <- ds]
->      ++ [P.Decl ("_stack" # i) (P.TRam 10 20) P.Uninit]
+>      ++ [P.Decl ("_stack" # i) (P.TRam stackDepth stackWidth) P.Uninit]
 >      ++ [P.Decl ("_ret" # i) (P.TLab []) P.Uninit]
 >      ++ [P.Decl ("_emit" # i) (P.TNat 1) P.Uninit]
 >      ++ [P.Decl ("_token" # i) (P.TNat (length neighbours)) P.Uninit
@@ -339,6 +339,12 @@ barring different instances of variable names.)
 >
 >     par [] = P.Skip
 >     par ss = P.Par ss
+>
+>     stackWidth = fromInteger $ Map.findWithDefault 20 "StackWidth" (opts p)
+>     stackDepth = fromInteger $
+>       log2 (Map.findWithDefault 1024 "StackDepth" (opts p) - 1) + 1
+>
+>     log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
 
 A network is a mapping from node ids to neighbouring node ids.
 
