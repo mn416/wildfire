@@ -87,8 +87,8 @@ the same label type.
 >     indirect = ind (code p)
 >       where
 >         ind (v := Var w) | v `elem` labelVars = [(v, w)]
->         ind (Push m v) | v `elem` labelVars = [(m, v)]
->         ind (Pop m v) | v `elem` labelVars = [(v, m)]
+>         ind (Push m vs) = [(m, v) | v <- vs, v `elem` labelVars]
+>         ind (Pop m vs) = [(v, m) | v <- vs, v `elem` labelVars]
 >         ind s = extract ind s
 
 > propagate :: [(Id, Id)] -> Map.Map Id [Id] -> Map.Map Id [Id]
@@ -141,8 +141,8 @@ assigned to a pointer q then p and q have the same pointer type.
 >     indirect = ind (code p)
 >       where
 >         ind (v := Var w) | v `elem` ptrVars = [(v, w)]
->         ind (Push m v) | v `elem` ptrVars = [(m, v)]
->         ind (Pop m v) | v `elem` ptrVars = [(v, m)]
+>         ind (Push m vs) = [(m, v) | v <- vs, v `elem` ptrVars]
+>         ind (Pop m vs) = [(v, m) | v <- vs, v `elem` ptrVars]
 >         ind s = extract ind s
 
 Auxiliary Circuitry
@@ -196,6 +196,18 @@ Print a byte (a bit-string 8 bits)
 >   :> "reg_send" := Lit (Just 1) 0
 >   :> Tick
 
+The dw-width chunks of register r of width w.
+ 
+> chunks :: Id -> Int -> Int -> [Exp]
+> chunks r w dw = chunks' w
+>   where
+>     chunks' left
+>       | left == 0  = []
+>       | left == dw = [ Select (left-1) 0 (Var r) ]
+>       | left < dw  = [ Lit (Just (dw-left)) 0 `Concat`
+>                          Select (left-1) 0 (Var r) ]
+>       | otherwise  = Select (left-1) (left-dw) (Var r) : chunks' (left-dw)
+
 Print a bit-string of any width
 
 > gprintStm :: Int -> Id -> Stm
@@ -226,10 +238,8 @@ Stack Statements
 Push and Pop statements are implemented in terms of other constructs.
 Functions pushOne and popOne allow pushing and popping data whose
 width is the same as the data width of the stack.  But the Push and
-Pop statements are more general, allowing pushing and popping data of
-any width, implemented by "chunking". Currently chunking is achieved
-by a simple compile-time loop but a run-time loop could be more
-efficient.
+Pop statements are more general, allowing pushing and popping multiple
+variables of any width.
 
 > pushOne :: Id -> Exp -> Stm
 > pushOne s e = top := e :> ForkJump (s ++ "_push")
@@ -263,25 +273,62 @@ The first argument to popOneCode is the address width.
 >     top = s ++ "_top"
 >     sp  = s ++ "_sp"
 
-The chunks of register r of width w for a stack of data-width dw are:
+Split a list of vars (being pushed or popped) into a list of list of
+sliced vars, where the total width of each sublist equals the width of
+the stack.
 
-> chunks :: Id -> Int -> Int -> [Exp]
-> chunks r w dw = chunks' w
+> data Slice =
+>     Pad Width         -- Padding
+>   | Slice Id Int Int  -- Bit slice (with high and low indices)
+
+> slices :: Int -> [(Id, Width)] -> [[Slice]]
+> slices max vws = List.map reverse (split [] max vws)
 >   where
->     chunks' left
->       | left == 0  = []
->       | left == dw = [ Select (left-1) 0 (Var r) ]
->       | left < dw  = [ Lit (Just (dw-left)) 0 `Concat`
->                          Select (left-1) 0 (Var r) ]
->       | otherwise  = Select (left-1) (left-dw) (Var r) : chunks' (left-dw)
+>     split acc rem []
+>       | rem == max = []
+>       | rem >  0   = [Pad rem : acc]
+>       | rem == 0   = [acc]
+>     split acc rem ((v,w):vws)
+>       | w == rem = (Slice v (w-1) 0 : acc) : split [] max vws
+>       | w <  rem = split (Slice v (w-1) 0 : acc) (rem-w) vws
+>       | w >  rem = (Slice v (w-1) (w-rem) : acc) :
+>                      split [] max ((v, w-rem):vws)
 
-Shift the contents of x rightwards into y.
+> instance Show Slice where
+>   show (Pad w) = "0[" ++ show (w-1) ++ ":0]"
+>   show (Slice v high low) =
+>     v ++ "[" ++ show high ++ ":" ++ show low ++ "]"
 
-> shiftInto :: Exp -> Int -> Id -> Int -> Stm
-> shiftInto x wx y wy
->   | wx > wy   = error "shiftInto"
->   | wx == wy  = y := x
->   | otherwise = y := (x `Concat` Select (wy-1) wx (Var y))
+Convert a slice to an expression.
+
+> sliceToExp :: Slice -> Exp
+> sliceToExp (Pad w) = Lit (Just w) 0
+> sliceToExp (Slice v high low) = Select high low (Var v)
+
+Partial assignment: assign to a bit-sliced variable.
+
+> assignSlice :: (Id -> Width) -> Slice -> Exp -> Stm
+> assignSlice getWidth (Pad n) rhs = Skip
+> assignSlice getWidth (Slice v high low) rhs
+>   | (w-1) == high && low == 0 = v := rhs
+>   | (w-1) == high = v := (rhs `Concat` Select (low-1) 0 (Var v))
+>   | low == 0 = v := (Select (w-1) (high+1) (Var v) `Concat` rhs)
+>   | otherwise = v := (Select (w-1) (high+1) (Var v) `Concat` rhs
+>                    `Concat` Select (low-1) 0 (Var v))
+>   where w = getWidth v
+
+Given a variable v (of width w) and a list of slices ss of other
+variables (of combined width w), return a list of contiguous slices of
+v that can hold ss.
+
+> holdSlices :: Id -> Width -> [Slice] -> [Slice]
+> holdSlices v w [] = []
+> holdSlices v w (s:ss) =
+>   case s of
+>     Pad n -> Pad n : holdSlices v (w-n) ss
+>     Slice _ high low ->
+>       let len = 1+high-low in
+>         Slice v (w-1) (w-len) : holdSlices v (w-len) ss
 
 Desguar all Push and Pop statements into other constructs.
 
@@ -297,31 +344,27 @@ Desguar all Push and Pop statements into other constructs.
 >                 | Decl s (TRam aw dw) _ <- decls p ]
 >     }
 >   where
->     trStm (Push s x) = pushChunks s x
->     trStm (Pop s x) = popChunks s x
+>     trStm (Push s vs) = pushMany s vs
+>     trStm (Pop s vs) = popMany s vs
 >     trStm other = descend trStm other
 >
->     pushChunks :: Id -> Id -> Stm
->     pushChunks s x = foldr (:>) Skip $ intersperse Tick $
->                           [pushOne s c | c <- cs]
+>     pushMany :: Id -> [Id] -> Stm
+>     pushMany s vs = foldr (:>) Skip $ intersperse Tick
+>         [pushOne s (foldr1 Concat (List.map sliceToExp sl)) | sl <- ss]
 >       where
->         cs = chunks x wx ws
->         ws = getWidth s
->         wx = getWidth x
+>         ss = slices (getWidth s) [(v, getWidth v) | v <- vs]
 >
->     popChunks :: Id -> Id -> Stm
->     popChunks s x =
->        foldr (:>) Skip $ intersperse Tick $
->            [popOne s :> shiftInto z wz x wx | wz > 0]
->         ++ replicate (wx `div` ws)
->                      (popOne s :> shiftInto (Var top) ws x wx)
+>     popMany :: Id -> [Id] -> Stm
+>     popMany s vs = foldr (:>) Skip $ intersperse Tick $
+>       [ foldr (:>) (popOne s) $
+>           zipWith (assignSlice getWidth) sl
+>                   (List.map sliceToExp (holdSlices top sw sl))
+>       | sl <- ss ]
 >       where
+>         ss  = reverse (slices sw [(v, getWidth v) | v <- vs])
+>         sw  = getWidth s
 >         top = s ++ "_top"
->         ws  = getWidth s
->         wx  = getWidth x
->         wz  = wx `mod` ws
->         z   = Select (wz-1) 0 (Var top)
-> 
+>
 >     -- Determine the data width of a register or RAM in a program.
 >     getWidth :: Id -> Int
 >     getWidth x =

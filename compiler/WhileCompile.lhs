@@ -254,12 +254,12 @@ barring different instances of variable names.)
 >               [ s' ]
 >
 >            ++ [ P.Label ("_backtrack" # i) ]
->            ++ [ P.Pop ("_stack" # i) ("_ret" # i), P.Tick ]
+>            ++ [ P.Pop ("_stack" # i) ["_ret" # i], P.Tick ]
 >            ++ [ P.IndJump ("_ret" # i) ]
 >
 >            ++ [ P.Label ("_terminate" # i) ]
 >            ++ [ ("_ret" # i) P.:= P.Lab ("_terminate" # i), P.Tick]
->            ++ [ P.Push ("_stack" # i) ("_ret" # i), P.Tick ]
+>            ++ [ P.Push ("_stack" # i) ["_ret" # i], P.Tick ]
 >            ++ [ P.Release ("_lock" # i), P.Tick ]
 >            ++ [ P.Halt ]
 >
@@ -296,9 +296,9 @@ barring different instances of variable names.)
 >                           ++ [ P.Tick, P.ForkJump (spawnLabel' # j) ])
 >                   P.Tick
 >          let saveRestore = P.block $ intersperse P.Tick
->                               [ P.Push stack (v # i) | v <- live ]
+>                               [ P.Push stack [v # i | v <- live ] ]
 >                            ++ [ ret P.:= P.Lab retLabel, P.Tick ]
->                            ++ [ P.Push stack ret, P.Tick ]
+>                            ++ [ P.Push stack [ret], P.Tick ]
 >          return $ P.block $
 >            (if length neighbours > 0 then
 >                [ P.Acquire token ["_lock" # j | j <- neighbours]
@@ -310,7 +310,7 @@ barring different instances of variable names.)
 >                ] else [saveRestore])
 >            ++ [ c1, P.Jump endLabel ]
 >            ++ [ P.Label retLabel ]
->            ++ intersperse P.Tick [ P.Pop stack (v # i) | v <- reverse live ]
+>            ++ [ P.Pop stack [v # i | v <- live ] ]
 >            ++ [ P.Tick ]
 >            ++ [ P.Label spawnLabel ]
 >            ++ [ c2 ]
@@ -377,7 +377,7 @@ of nodes.)
 >          -- Initialise stacks
 >          ++ [ ("_ret" # i) P.:= P.Lab ("_terminate" # i) | i <- [0..n-1] ]
 >          ++ [ P.Tick ]
->          ++ [ P.Push ("_stack" # i) ("_ret" # i) | i <- [0..n-1] ]
+>          ++ [ P.Push ("_stack" # i) ["_ret" # i] | i <- [0..n-1] ]
 >          ++ [ P.Tick ]
 >
 >          -- Initially, only the first processor is executing code
@@ -533,8 +533,7 @@ Top-level compiler
 >           -- translate (butterfly 4)
 >           -- translate (torus 12 12)
 >           -- translate (torus 8 8)
->           translate (mesh 1 1)
->           --translate (wavefly 6 8)
+>           translate (wavefly 6 8)
 >         . annotateLive
 >         . typeCheck
 >         . staticRestrictions

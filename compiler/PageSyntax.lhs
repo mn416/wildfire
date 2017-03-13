@@ -64,8 +64,8 @@ Statements.
 >   | GPrint Width Id           {- Send bit-string to the serial port -}
 >   | Load Id Exp               {- Read from Block RAM -}
 >   | Store Id Exp Exp          {- Write to Block RAM -}
->   | Push Id Id                {- Push onto stack given value -}
->   | Pop Id Id                 {- Pop top stack element -}
+>   | Push Id [Id]              {- Push onto stack given values -}
+>   | Pop Id [Id]               {- Pop top stack elements -}
 >   | Halt                      {- Halt execution -}
 >     deriving Show
 

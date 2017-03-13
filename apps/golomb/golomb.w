@@ -1,3 +1,6 @@
+-- Compiler options
+opt StackWidth = 30
+
 -- Search for 10 mark ruler of max length 55
 var list  : 55 = 0x40000000000000
 var diffs : 55 = 0

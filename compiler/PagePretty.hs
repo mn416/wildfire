@@ -66,8 +66,8 @@ prettyStm (Load v e) =
   text "fetch" <+> text v <+> text "[" <+> prettyExp e <+> text "]"
 prettyStm (Store v e1 e2) = text v <+> text "[" <> prettyExp e1 <> text "]"
                                    <+> text ":=" <+> prettyExp e2
-prettyStm (Push m v) = text "push" <+> text m <+> text v
-prettyStm (Pop m v) = text "pop" <+> text m <+> text v
+prettyStm (Push m vs) = text "push" <+> text m <+> hsep (map text vs)
+prettyStm (Pop m vs) = text "pop" <+> text m <+> hsep (map text vs)
 prettyStm Halt = text "halt"
 
 prettyExp :: Exp -> Doc

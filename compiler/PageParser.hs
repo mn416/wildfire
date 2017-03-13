@@ -116,8 +116,8 @@ stmt'  = pure Skip <* reserved "skip"
      <|> pure Release <*> (reserved "release" *> var)
      <|> pure Print <*> (reserved "print" *> var)
      <|> pure Load <*> (reserved "fetch" *> var) <*> brackets expr
-     <|> pure Push <*> (reserved "push" *> var) <*> var
-     <|> pure Pop <*> (reserved "pop" *> var) <*> var
+     <|> pure Push <*> (reserved "push" *> var) <*> many1 var
+     <|> pure Pop <*> (reserved "pop" *> var) <*> many1 var
      <|> pure Halt <* reserved "halt"
      <|> parens stmt
 
