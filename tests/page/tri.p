@@ -11,7 +11,7 @@ in
 
   #begin:
 
-    if n == 0 then goto #out else skip end ;
+    if n == 0 then goto #out else skip ;
     x := x + n ;
     n := n - 1 ;
     tick ;

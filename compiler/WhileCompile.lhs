@@ -340,9 +340,9 @@ barring different instances of variable names.)
 >     par [] = P.Skip
 >     par ss = P.Par ss
 >
->     stackWidth = fromInteger $ Map.findWithDefault 20 "StackWidth" (opts p)
+>     stackWidth = fromInteger $ Map.findWithDefault 40 "StackWidth" (opts p)
 >     stackDepth = fromInteger $
->       log2 (Map.findWithDefault 1024 "StackDepth" (opts p) - 1) + 1
+>       log2 (Map.findWithDefault 512 "StackDepth" (opts p) - 1) + 1
 >
 >     log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
 
@@ -533,7 +533,9 @@ Top-level compiler
 >           -- translate (butterfly 4)
 >           -- translate (torus 12 12)
 >           -- translate (torus 8 8)
->           translate (wavefly 6 8)
+>           -- translate (wavefly 6 8)
+>           -- translate (wavefly 5 16)
+>           translate (torus 23 23)
 >         . annotateLive
 >         . typeCheck
 >         . staticRestrictions

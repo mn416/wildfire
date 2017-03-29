@@ -62,7 +62,7 @@ prettyStm (Acquire v locks) =
 prettyStm (Release v) = text "release" <+> text v
 prettyStm (Print v) = text "print" <+> text v
 prettyStm (GPrint _ v) = text "gprint" <+> text v
-prettyStm (Load v e) =
+prettyStm (Fetch v e) =
   text "fetch" <+> text v <+> text "[" <+> prettyExp e <+> text "]"
 prettyStm (Store v e1 e2) = text v <+> text "[" <> prettyExp e1 <> text "]"
                                    <+> text ":=" <+> prettyExp e2

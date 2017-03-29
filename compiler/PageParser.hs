@@ -104,10 +104,8 @@ stmt'  = pure Skip <* reserved "skip"
      <|> assign
      <|> pure Ifte <*> (reserved "if" *> expr)
                    <*> (reserved "then" *> stmt')
-                   <*> (reserved "else" *> stmt' <*
-                           reserved "end")
-     <|> pure While <*> (reserved "while" *> expr) <*>
-           (stmt' <* reserved "end" <* reserved "while")
+                   <*> (reserved "else" *> stmt')
+     <|> pure While <*> (reserved "while" *> expr) <*> stmt'
      <|> pure (\l s -> Label l :> s) <*> (stmtLabel <* reservedOp ":")
                                      <*> stmt
      <|> goto
@@ -115,7 +113,7 @@ stmt'  = pure Skip <* reserved "skip"
 --   <|> pure Acquire <*> (reserved "acquire" *> var) <*> return Nothing
      <|> pure Release <*> (reserved "release" *> var)
      <|> pure Print <*> (reserved "print" *> var)
-     <|> pure Load <*> (reserved "fetch" *> var) <*> brackets expr
+     <|> pure Fetch <*> (reserved "fetch" *> var) <*> brackets expr
      <|> pure Push <*> (reserved "push" *> var) <*> many1 var
      <|> pure Pop <*> (reserved "pop" *> var) <*> many1 var
      <|> pure Halt <* reserved "halt"

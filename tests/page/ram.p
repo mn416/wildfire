@@ -1,6 +1,6 @@
 declare
 
-  m   : nat 8 :-> nat 8,
+  m   : ram (nat 8) (nat 8),
   i   : nat 8,
   acc : nat 8
 

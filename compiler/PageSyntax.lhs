@@ -62,7 +62,7 @@ Statements.
 >   | Release Id                {- Release lock -}
 >   | Print Id                  {- Send byte to the serial port -}
 >   | GPrint Width Id           {- Send bit-string to the serial port -}
->   | Load Id Exp               {- Read from Block RAM -}
+>   | Fetch Id Exp              {- Read from Block RAM -}
 >   | Store Id Exp Exp          {- Write to Block RAM -}
 >   | Push Id [Id]              {- Push onto stack given values -}
 >   | Pop Id [Id]               {- Pop top stack elements -}
@@ -133,6 +133,6 @@ Traversals
 >     IndAssign x e -> IndAssign x (f e)
 >     Ifte e s1 s2  -> Ifte (f e) s1 s2
 >     While e s     -> While (f e) s
->     Load m e      -> Load m (f e)
+>     Fetch m e     -> Fetch m (f e)
 >     Store m e1 e2 -> Store m (f e1) (f e2)
 >     other         -> other

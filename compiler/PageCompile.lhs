@@ -45,7 +45,7 @@ be determined or is infinite.
 > time (Release x) = Just 0
 > time (Print x) = Nothing
 > time (GPrint w x) = Nothing
-> time (Load r e) = Just 0
+> time (Fetch r e) = Just 0
 > time (Store r e1 e2) = Just 0
 > time Halt = Nothing
 
@@ -266,7 +266,7 @@ The first argument to popOneCode is the address width.
 > popOneCode w s =
 >      Label (s ++ "_pop")
 >   :> top := RamOutput s
->   :> Load s (Apply2 Sub (Var sp) (Lit (Just w) 1))
+>   :> Fetch s (Apply2 Sub (Var sp) (Lit (Just w) 1))
 >   :> sp := Apply2 Sub (Var sp) (Lit (Just w) 1)
 >   :> Halt
 >   where
@@ -408,7 +408,7 @@ trigger signal and an action.
 > data Action =
 >     AssignReg Id Sig     {- Assigment of signal to register -}
 >   | JumpToLabel Id       {- Jump to label id -}
->   | LoadRam Id Sig       {- Read from RAM at address -}
+>   | FetchRam Id Sig      {- Read from RAM at address -}
 >   | StoreRam Id Sig Sig  {- Write to RAM at address given value -}
 >   | GrabLock Id Sig Sig  {- Ask for and grab given lock -}
 >   | ReleaseLock Id       {- Release given lock -}
@@ -503,9 +503,9 @@ Compile a statement to give a schedule.
 >        y <- compExp e
 >        let sched = [(en, AssignReg x y) | (x, en) <- zip (ptrTypes!v) ens]
 >        return (go, sched)
->   compStm go (Load r e) =
+>   compStm go (Fetch r e) =
 >     do i <- compExp e
->        return (go, [(go, LoadRam r i)])
+>        return (go, [(go, FetchRam r i)])
 >   compStm go (Store r e1 e2) =
 >     do i <- compExp e1
 >        x <- compExp e2
@@ -615,7 +615,7 @@ loops may exists from a signal back to itself.)
 >          out     <- blockRam (RamInputs en writeEn dataIn addrIn)
 >          (env!r) <== out
 >       where
->         reads  = [(go, i) | (go, LoadRam r1 i) <- s, r == r1]
+>         reads  = [(go, i) | (go, FetchRam r1 i) <- s, r == r1]
 >         writes = [(go, i, x) | (go, StoreRam r1 i x) <- s, r == r1]
 >
 >     locks = [v | Decl v TLock _ <- decls p]
@@ -751,10 +751,10 @@ well-typed.  This function is not efficient.
 >       | (env!x) == TNat 8 = Print x
 >     tc (GPrint w x) | isNat tx && natWidth tx == w = GPrint w x
 >       where tx = env!x
->     tc (Load r e) =
+>     tc (Fetch r e) =
 >       case env!r of
->         TRam aw dw -> Load r (tcExp aw e)
->         other -> typeError (show (Load r e))
+>         TRam aw dw -> Fetch r (tcExp aw e)
+>         other -> typeError (show (Fetch r e))
 >     tc (Store r i e) =
 >       case env!r of
 >         TRam aw dw ->
