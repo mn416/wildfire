@@ -21,7 +21,7 @@ page = T.makeTokenParser $ emptyDef
                         "inv", "declare", "in", "reg", "label", "fork",
                         "lock", "of", "fetch", "ram", "from", "to",
                         "data", "push", "pop", "top", "bits", "end",
-                        "take", "return"
+                        "do", "return"
                        ]
   , caseSensitive    = True
   }
@@ -103,9 +103,10 @@ stmt'  = pure Skip <* reserved "skip"
                         <*> (reservedOp ":=" *> expr)
      <|> assign
      <|> pure Ifte <*> (reserved "if" *> expr)
-                   <*> (reserved "then" *> stmt')
-                   <*> (reserved "else" *> stmt')
-     <|> pure While <*> (reserved "while" *> expr) <*> stmt'
+                   <*> (reserved "then" *> stmt)
+                   <*> (reserved "else" *> stmt <* reserved "end")
+     <|> pure While <*> (reserved "while" *> expr <* reserved "do")
+                    <*> (stmt <* reserved "end")
      <|> pure (\l s -> Label l :> s) <*> (stmtLabel <* reservedOp ":")
                                      <*> stmt
      <|> goto
@@ -136,10 +137,11 @@ assign =
 -- Declarations
 
 declarations :: Parser [Decl]
-declarations = decl `sepEndBy` comma
+declarations = many decl
 
 decl :: Parser Decl
-decl = pure Decl <*> (var <* reserved ":") <*> typ <*> initial
+decl = pure Decl <*> (reserved "var" *> var <* reserved ":")
+                 <*> typ <*> initial
 
 initial :: Parser Init
 initial =
@@ -149,12 +151,11 @@ initial =
        Just i  -> return (IntInit i)
 
 typ :: Parser Type
-typ = pure TNat <*> (reserved "nat" *> nat)
-  <|> pure (`TPtr` []) <*> (reservedOp "^" *> parens (reserved "nat" *> nat))
+typ = pure TReg <*> (reserved "reg" *> nat)
+  <|> pure (`TPtr` []) <*> (reserved "ptr" *> nat)
   <|> pure (TLab []) <* reserved "label"
   <|> pure TLock <* reserved "lock"
-  <|> pure TRam <*> (reserved "ram" *> parens (reserved "nat" *> nat))
-                <*> parens (reserved "nat" *> nat)
+  <|> pure TRam <*> (reserved "ram" *> nat) <*> nat
 
 nat :: Parser Int
 nat = pure fromIntegral <*> natural
@@ -165,8 +166,8 @@ log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
 -- Programs
 
 prog :: Parser Prog
-prog = pure Prog <*> (reserved "declare" *> declarations)
-                 <*> (reserved "in" *> stmt)
+prog = pure Prog <*> declarations
+                 <*> stmt
  
 parseProgFile :: SourceName -> IO Prog
 parseProgFile f = parseFromFile (prog <* eof) f >>= \result ->

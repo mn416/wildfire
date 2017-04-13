@@ -1,22 +1,18 @@
-declare
+var m   : ram 8 8
+var i   : reg 8
+var acc : reg 8
 
-  m   : ram (nat 8) (nat 8),
-  i   : nat 8,
-  acc : nat 8
+i := 0 ; tick ; while i < 10 do
+  m[i] := 65 + i ;
+  i := i + 1 ;
+  tick
+end ;
 
-in
-
-  i := 0 ; tick ; while i < 10 (
-    m[i] := 65 + i ;
-    i := i + 1 ;
-    tick
-  ) ;
-
-  i := 0 ; tick ; while i < 10 (
-    fetch m[i] ;
-    i := i + 1 ;
-    tick ;
-    acc := data m ;
-    tick ;
-    print acc
-  )
+i := 0 ; tick ; while i < 10 do
+  fetch m[i] ;
+  i := i + 1 ;
+  tick ;
+  acc := data m ;
+  tick ;
+  print acc
+end

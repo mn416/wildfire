@@ -121,7 +121,7 @@ initial =
        Just i  -> return (IntInit i)
 
 typ :: Parser Type
-typ = pure TNat <*> nat
+typ = pure TReg <*> nat
 
 nat :: Parser Int
 nat = pure fromIntegral <*> natural

@@ -29,7 +29,7 @@ A declaration associates an identifier with a type.
 > type Id = String
 
 > data Type =
->     TNat Width             {- Register with width -}
+>     TReg Width             {- Register with width -}
 >   | TPtr Width [Id]        {- Pointer -}
 >   | TLab [Id]              {- Label -}
 >   | TLock                  {- Lock -}

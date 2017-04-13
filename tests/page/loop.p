@@ -1,12 +1,8 @@
-declare
+var i : reg 8
 
-  i : nat 8
-
-in
-
-  i := 0 ;
-  tick ;
-  while i < 10 (
-    i := i + 1 ;
-    tick
-  )
+i := 0 ;
+tick ;
+while i < 10 do
+  i := i + 1 ;
+  tick
+end

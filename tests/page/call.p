@@ -1,9 +1,5 @@
-declare
-
-  ret : label,
-  x   : nat 8
-
-in
+var ret : label
+var x   : reg 8
 
   x := 65 ;
   ret := #prRet ;

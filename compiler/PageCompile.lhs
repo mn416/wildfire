@@ -180,8 +180,8 @@ These can be defined in terms of other constructs:
 
 > printDecls :: [Decl]
 > printDecls =
->   [ Decl "reg_dataToSend" (TNat 8) (IntInit 0)
->   , Decl "reg_send" (TNat 1) (IntInit 0)
+>   [ Decl "reg_dataToSend" (TReg 8) (IntInit 0)
+>   , Decl "reg_send" (TReg 1) (IntInit 0)
 >   ]
 
 Print a byte (a bit-string 8 bits)
@@ -334,8 +334,8 @@ Desguar all Push and Pop statements into other constructs.
 
 > desugarStacks :: Prog -> Prog
 > desugarStacks p =
->   p { decls = decls p ++ concat [ [ Decl (m ++ "_sp") (TNat aw) (IntInit 0)
->                                   , Decl (m ++ "_top") (TNat dw) (IntInit 0) ]
+>   p { decls = decls p ++ concat [ [ Decl (m ++ "_sp") (TReg aw) (IntInit 0)
+>                                   , Decl (m ++ "_top") (TReg dw) (IntInit 0) ]
 >                                  | Decl m (TRam aw dw) _ <- decls p ]
 >     , code  = trStm (code p)
 >            :> Halt
@@ -369,7 +369,7 @@ Desguar all Push and Pop statements into other constructs.
 >     getWidth :: Id -> Int
 >     getWidth x =
 >       hd $ [w | Decl v (TRam _ w) _ <- decls p, v == x]
->         ++ [w | Decl v (TNat w) _ <- decls p, v == x]
+>         ++ [w | Decl v (TReg w) _ <- decls p, v == x]
 >         ++ [length labs | Decl v (TLab labs) _ <- decls p, v == x]
 >         ++ [length regs | Decl v (TPtr _ regs) _ <- decls p, v == x]
 >       where
@@ -392,7 +392,7 @@ Create a signal (of the correct width) for each identifier:
 >      let m = zip [v | (v, n) <- ps] sigs
 >      setupIO (fromList m)
 >   where
->     ps = [(v, n) | Decl v (TNat n) _ <- decls p]
+>     ps = [(v, n) | Decl v (TReg n) _ <- decls p]
 >       ++ [(v, length labs) | Decl v (TLab labs) _ <- decls p]
 >       ++ [(v, length regs) | Decl v (TPtr _ regs) _ <- decls p]
 >       ++ [(v, 1) | Decl v TLock _ <- decls p]
@@ -585,7 +585,7 @@ loops may exists from a signal back to itself.)
 >      -- Drive lock-related signals
 >      sequence_ [lock l | l <- locks]
 >   where
->     regs = [(v, init) | Decl v (TNat n) init <- decls p]
+>     regs = [(v, init) | Decl v (TReg n) init <- decls p]
 >         ++ [(v, init) | Decl v (TLab _) init <- decls p]
 >         ++ [(v, init) | Decl v (TPtr _ _) init <- decls p]
 >     reg (r, init)
@@ -669,7 +669,7 @@ well-typed.  This function is not efficient.
 >     widthOf (Lit w n) = w
 >     widthOf (Var v) =
 >       case env!v of
->         TNat w -> Just w
+>         TReg w -> Just w
 >         other  -> Nothing
 >     widthOf (Apply1 op e) = widthOf e
 >     widthOf (Apply2 op e1 e2) = widthOf e1 `mplus` widthOf e2
@@ -685,7 +685,7 @@ well-typed.  This function is not efficient.
 >       where
 >         ch (Lit Nothing n) = Lit (Just w) n
 >         ch (Lit (Just w') n) | w == w' = Lit (Just w) n
->         ch (Var v) | env!v == TNat w = e
+>         ch (Var v) | env!v == TReg w = e
 >         ch (Apply1 op e) = Apply1 op (tcExp w e)
 >         ch (Apply2 op e1 e2)
 >           | isCmpOp op =
@@ -718,7 +718,7 @@ well-typed.  This function is not efficient.
 >     tc (v := Var w)
 >       | isLab (env!v) && isLab (env!w) = v := Var w
 >     tc (v := Ptr w)
->       | isPtr tv && isNat tw && ptrWidth tv == natWidth tw = v := Ptr w
+>       | isPtr tv && isNat tw && ptrWidth tv == regWidth tw = v := Ptr w
 >       where (tv, tw) = (env!v, env!w)
 >     tc (v := Var w)
 >       | isPtr tv && isPtr tw && ptrWidth tv == ptrWidth tw = v := Var w
@@ -728,7 +728,7 @@ well-typed.  This function is not efficient.
 >       where tv = env!v
 >     tc (v := e) =
 >       case env!v of
->         TNat n -> v := tcExp n e
+>         TReg n -> v := tcExp n e
 >         other  -> typeError (show (v := e))
 >     tc (Par ss) = Par [tc s | s <- ss]
 >     tc (Ifte e s1 s2) = Ifte (tcExp 1 e) (tc s1) (tc s2)
@@ -744,12 +744,12 @@ well-typed.  This function is not efficient.
 >       | isLab (env!x) = IndJump x
 >     tc (Acquire x locks)
 >       | and [(env!lock) == TLock | lock <- locks]
->      && (env!x) == TNat (length locks) = Acquire x locks
+>      && (env!x) == TReg (length locks) = Acquire x locks
 >     tc (Release x)
 >       | (env!x) == TLock = Release x
 >     tc (Print x)
->       | (env!x) == TNat 8 = Print x
->     tc (GPrint w x) | isNat tx && natWidth tx == w = GPrint w x
+>       | (env!x) == TReg 8 = Print x
+>     tc (GPrint w x) | isNat tx && regWidth tx == w = GPrint w x
 >       where tx = env!x
 >     tc (Fetch r e) =
 >       case env!r of
@@ -768,13 +768,13 @@ well-typed.  This function is not efficient.
 >
 >     tcDecl d = 
 >       case d of
->         Decl v (TNat n) (IntInit _) -> d
+>         Decl v (TReg n) (IntInit _) -> d
 >         Decl v t (IntInit _) ->
 >           typeError ("bad initialiser for variable " ++ v)
 >         other -> other
 
 > isNat :: Type -> Bool
-> isNat (TNat _) = True
+> isNat (TReg _) = True
 > isNat other = False
 
 > isLab :: Type -> Bool
@@ -785,8 +785,8 @@ well-typed.  This function is not efficient.
 > isPtr (TPtr _ _) = True
 > isPtr other = False
 
-> natWidth :: Type -> Int
-> natWidth (TNat n) = n
+> regWidth :: Type -> Int
+> regWidth (TReg n) = n
 
 > ptrWidth :: Type -> Int
 > ptrWidth (TPtr n _) = n

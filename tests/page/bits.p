@@ -1,9 +1,5 @@
-declare
+var x : reg 8
+var y : reg 16
 
-  x : nat 8,
-  y : nat 16
-
-in
-
-  y := x . x ;
-  x := bits 11 to 4 of y
+y := x . x ;
+x := bits 11 to 4 of y

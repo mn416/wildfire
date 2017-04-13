@@ -1,11 +1,7 @@
-declare
-
-  ret : label,
-  r   : label,
-  stk : ram (nat 8) (nat 8),
-  x   : nat 8
-
-in
+var ret : label
+var r   : label
+var stk : ram 8 8
+var x   : reg 8
 
   x := 65 ;
   ret := #prRet ;

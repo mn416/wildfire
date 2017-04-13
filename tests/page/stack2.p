@@ -1,32 +1,28 @@
-declare
+var stk : ram 8 8
+var x   : reg 8
+var y   : reg 8
 
-  stk : ram (nat 8) (nat 8),
-  x   : nat 8,
-  y   : nat 8
+x := 67 ;
+y := 68 ;
+tick ;
 
-in
+push stk x ;
+tick ;
+tick ;
 
-  x := 67 ;
-  y := 68 ;
-  tick ;
+push stk y ;
+tick ;
+tick ;
 
-  push stk x ;
-  tick ;
-  tick ;
+pop stk x ;
+tick ;
+tick ;
 
-  push stk y ;
-  tick ;
-  tick ;
+pop stk y ;
+tick ;
 
-  pop stk x ;
-  tick ;
-  tick ;
+print x ; tick ; print y ; tick ;
 
-  pop stk y ;
-  tick ;
+print x ; tick ; print y ; tick ;
 
-  print x ; tick ; print y ; tick ;
-
-  print x ; tick ; print y ; tick ;
-
-  halt
+halt

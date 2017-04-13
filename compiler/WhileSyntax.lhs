@@ -30,7 +30,7 @@ A declaration associates an identifier with a type.
 > type Id = String
 
 > data Type =
->     TNat Width             {- Register with width -}
+>     TReg Width             {- Register with width -}
 >     deriving (Eq, Show)
 
 > type Width = Int

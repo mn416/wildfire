@@ -32,7 +32,7 @@ well-typed.  This function is not efficient.
 >     widthOf (Lit w n) = w
 >     widthOf (Var v) =
 >       case env!v of
->         TNat w -> Just w
+>         TReg w -> Just w
 >         other  -> Nothing
 >     widthOf (Apply1 op e) = widthOf e
 >     widthOf (Apply2 op e1 e2) = widthOf e1 `mplus` widthOf e2
@@ -43,7 +43,7 @@ well-typed.  This function is not efficient.
 >       where
 >         ch (Lit Nothing n) = Lit (Just w) n
 >         ch (Lit (Just w') n) | w == w' = Lit (Just w) n
->         ch (Var v) | env!v == TNat w = e
+>         ch (Var v) | env!v == TReg w = e
 >         ch (Apply1 op e) = Apply1 op (tcExp w e)
 >         ch (Apply2 op e1 e2)
 >           | P.isCmpOp op =
@@ -58,7 +58,7 @@ well-typed.  This function is not efficient.
 >     tc (s1 :> s2) = tc s1 :> tc s2
 >     tc (v := e) =
 >       case env!v of
->         TNat n -> v := tcExp n e
+>         TReg n -> v := tcExp n e
 >         other  -> typeError (show (v := e))
 >     tc (s1 :|| s2) = tc s1 :|| tc s2
 >     tc (Ifte e s1 s2) = Ifte (tcExp 1 e) (tc s1) (tc s2)
@@ -71,7 +71,7 @@ well-typed.  This function is not efficient.
 >     -- Type checker for declarations
 >     tcDecl d =
 >       case d of
->         Decl v (TNat n) (P.IntInit i) -> d
+>         Decl v (TReg n) (P.IntInit i) -> d
 >         Decl v _ (P.IntInit i) -> typeError ("bad type for variable " ++ v)
 >         other -> other
 
@@ -330,11 +330,11 @@ barring different instances of variable names.)
 >
 >     trDecls :: [Decl] -> [P.Decl]
 >     trDecls ds =
->         [P.Decl (v # i) (P.TNat n) init | Decl v (TNat n) init <- ds]
+>         [P.Decl (v # i) (P.TReg n) init | Decl v (TReg n) init <- ds]
 >      ++ [P.Decl ("_stack" # i) (P.TRam stackDepth stackWidth) P.Uninit]
 >      ++ [P.Decl ("_ret" # i) (P.TLab []) P.Uninit]
->      ++ [P.Decl ("_emit" # i) (P.TNat 1) P.Uninit]
->      ++ [P.Decl ("_token" # i) (P.TNat (length neighbours)) P.Uninit
+>      ++ [P.Decl ("_emit" # i) (P.TReg 1) P.Uninit]
+>      ++ [P.Decl ("_token" # i) (P.TReg (length neighbours)) P.Uninit
 >         | length neighbours > 0]
 >
 >     par [] = P.Skip
@@ -423,14 +423,14 @@ of nodes.)
 >          ++ [ P.Tick, P.Jump "_output" ]
 >          
 >     -- Declarations for entire program
->     ds = [ P.Decl ("_count") (P.TNat 32) P.Uninit
->          , P.Decl ("_started") (P.TNat 1) P.Uninit
->          , P.Decl ("_initial_lock") (P.TNat 1) P.Uninit
->          , P.Decl ("_done_count") (P.TNat 20) P.Uninit
->          , P.Decl "_startbyte" (P.TNat 8) P.Uninit ]
+>     ds = [ P.Decl ("_count") (P.TReg 32) P.Uninit
+>          , P.Decl ("_started") (P.TReg 1) P.Uninit
+>          , P.Decl ("_initial_lock") (P.TReg 1) P.Uninit
+>          , P.Decl ("_done_count") (P.TReg 20) P.Uninit
+>          , P.Decl "_startbyte" (P.TReg 8) P.Uninit ]
 >       ++ [ P.Decl ("_lock" # i) (P.TLock) P.Uninit | i <- [0..n-1] ]
->       ++ [ P.Decl ("_emit_bus" # i) (P.TNat 1) P.Uninit | i <- [0..n] ]
->       ++ [ P.Decl ("_done" # i) (P.TNat 1) P.Uninit | i <- [0..n] ]
+>       ++ [ P.Decl ("_emit_bus" # i) (P.TReg 1) P.Uninit | i <- [0..n] ]
+>       ++ [ P.Decl ("_done" # i) (P.TReg 1) P.Uninit | i <- [0..n] ]
 >       ++ concatMap P.decls ps
 
 > (#) :: String -> Int -> String

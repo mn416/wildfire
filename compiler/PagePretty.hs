@@ -13,22 +13,19 @@ prettyPageProg p = renderStyle style (prettyProg p)
 
 prettyProg :: Prog -> Doc
 prettyProg p =
-     text "declare"
-  $$ nest 2 (vcat (punctuate comma
-                             (map prettyDecl (decls p))))
-  $$ text "in"
-  $$ nest 2 (prettyStm (code p))
+     vcat (map prettyDecl (decls p))
+  $$ prettyStm (code p)
 
 prettyType :: Type -> Doc
-prettyType (TNat w)     = text "nat" <+> text (show w)
-prettyType (TPtr w _)   = text "^" <> parens (text "nat" <+> text (show w))
+prettyType (TReg w)     = text "reg" <+> text (show w)
+prettyType (TPtr w _)   = text "ptr" <> text (show w)
 prettyType (TLab labs)  = text "label" <+> text "=" <+> text (show labs)
 prettyType TLock        = text "lock"
 prettyType (TRam aw dw) = text "ram" <+> text (show aw) <+> text (show dw)
 
 prettyDecl :: Decl -> Doc
 prettyDecl (Decl v ty init) =
-  text v <+> char ':' <+> prettyType ty <+> prettyInit init
+  text "var" <+> text v <+> char ':' <+> prettyType ty <+> prettyInit init
 
 prettyInit :: Init -> Doc
 prettyInit (Uninit) = text ""
@@ -48,11 +45,11 @@ prettyStm (Ifte e s1 s2) =
   $$ nest 2 (prettyStm s1)
   $$ text "else"
   $$ nest 2 (prettyStm s2)
-  $$ text "end if"
+  $$ text "end"
 prettyStm (While e s) =
-     text "while" <+> prettyExp e
-  $$ nest 2 (parens (prettyStm s))
-  $$ text "end while"
+     text "while" <+> prettyExp e <+> text "do"
+  $$ nest 2 (prettyStm s)
+  $$ text "end"
 prettyStm (Label lab) = text lab <> text ":"
 prettyStm (Jump lab) = text "jump" <+> text lab
 prettyStm (ForkJump lab) = text "fork" <+> text lab
