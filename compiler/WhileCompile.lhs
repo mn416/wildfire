@@ -11,6 +11,7 @@
 > import Data.Maybe
 > import Data.Map as Map
 > import Data.List as List
+> import qualified Data.Map as Map
 
 Type Checking
 =============
@@ -244,8 +245,9 @@ barring different instances of variable names.)
 
 > trProg :: Int -> [Int] -> Prog -> P.Prog
 > trProg i neighbours p =
->   P.Prog { P.decls = trDecls (decls p)
->          , P.code = snd $ runFresh (trCode (code p)) "_v" 0 }
+>   P.Prog { P.opts  = Map.empty
+>          , P.decls = trDecls (decls p)
+>          , P.code  = snd $ runFresh (trCode (code p)) "_v" 0 }
 >   where
 >     trCode :: Stm -> Fresh P.Stm
 >     trCode s =
@@ -356,7 +358,7 @@ program p.  (Node ids must lie in range [0..n-1] where n is the number
 of nodes.)
 
 > translate :: Network -> Prog -> P.Prog
-> translate network p = P.Prog ds c
+> translate network p = P.Prog Map.empty ds c
 >   where
 >     -- Number of processors
 >     n  = size network

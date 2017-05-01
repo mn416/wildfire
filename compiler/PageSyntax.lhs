@@ -8,11 +8,13 @@ compile Occam to hardware.
 
 > import Descend
 > import Control.Monad
+> import qualified Data.Map as Map
 
 A program consists of identifier declarations and a statement.
 
 > data Prog = 
->   Prog { decls   :: [Decl]
+>   Prog { opts    :: CompilerOpts
+>        , decls   :: [Decl]
 >        , code    :: Stm
 >        }
 >     deriving Show
@@ -34,13 +36,17 @@ A declaration associates an identifier with a type.
 >   | TLab [Id]              {- Label -}
 >   | TLock                  {- Lock -}
 >   | TRam Width Width       {- Ram with address & data width -}
+>   | TRom Width Width       {- Rom with address & data width -}
 >     deriving (Eq, Show)
 
 > type Width = Int
 
+> type CompilerOpts = Map.Map String Integer
+
 > data Init =
 >     Uninit                 {- Uninitialised -}
->   | IntInit Integer        {- Initialised to integer -}
+>   | IntInit Integer        {- Integer initialiser -}
+>   | StrInit String         {- String initialiser -}
 >   deriving Show
 
 Statements.
@@ -64,6 +70,7 @@ Statements.
 >   | GPrint Width Id           {- Send bit-string to the serial port -}
 >   | Fetch Id Exp              {- Read from Block RAM -}
 >   | Store Id Exp Exp          {- Write to Block RAM -}
+>   | LoadRom Id Id Id Exp      {- Load from ROM:port into register -}
 >   | Push Id [Id]              {- Push onto stack given values -}
 >   | Pop Id [Id]               {- Pop top stack elements -}
 >   | Halt                      {- Halt execution -}

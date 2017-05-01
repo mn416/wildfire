@@ -13,9 +13,9 @@ A Target Language for Hardware Compilation
 > , shl, shr, first
 > , (<==), select, concatSigs
 > , delay, delayEn, delayInit, delayInitEn, setReset
-> , blockRam, RamInputs(..)
+> , blockRam, dualBlockRam, RamInputs(..)
 > , andBits, orBits, treeM, treeM1
-> , mux, (?), mask, width, isZero
+> , mux, (?), mask, width, isZero, arbiter
 > , writeVerilog
 > ) where
 
@@ -63,10 +63,11 @@ An instance is a component with inputs and outputs.
 >   | Add | Sub | Mul | Div              {- Arithmetic -}
 >   | Eq  | Neq | Lt  | Gt | Lte | Gte   {- Comparison -}
 >   | Shl Int | Shr Int                  {- Constant shift -}
->   | Id  | BlockRam Int Int String      {- Identity & Block RAM-}
+>   | Id  | Mux                          {- Identity & Multiplexer -}
 >   | Delay | DelayEn | SetReset         {- Registers -}
 >   | Select Int Int  | Concat           {- Bit selection & concatenation -}
->   | Mux                                {- Multiplexer -}
+>   | BlockRam Int Int String String     {- Block RAM -}
+>   | DualBlockRam Int Int String String {- Dual-port block RAM -}
 >     deriving (Eq, Show)
 
 Interface (Lava Monad)
@@ -214,15 +215,15 @@ A set-reset flip-flop:
 
 > setReset :: Sig -> Sig -> Lava Sig
 > setReset s r
->   | width s == 1 && width r == 1 = -- op SetReset [s, r] 1
+>   | width s == 1 && width r == 1 =
 >     do x <- op SetReset [s, r] 1
 >        addInit x 0
 >        return x
 >   | otherwise = error "setReset flip-flop expects single-bit inputs"
 
-Block-RAMs:
+Block RAMs:
 
-> data RamInputs = 
+> data RamInputs =
 >   RamInputs {
 >     ramEn   :: Sig
 >   , writeEn :: Sig
@@ -230,16 +231,35 @@ Block-RAMs:
 >   , addrBus :: Sig
 >   }
 
-> blockRam :: RamInputs -> Lava Sig
-> blockRam inps =
+> blockRam :: String -> RamInputs -> Lava Sig
+> blockRam initFile inps =
 >   do out <- newSig (width (dataBus inps))
 >      ramName <- newSigId
->      newInst (BlockRam wid cap ramName,
+>      newInst (BlockRam wid cap ramName initFile,
 >        [ramEn inps, writeEn inps, dataBus inps, addrBus inps], [out])
 >      return out
 >   where
 >     wid = width (dataBus inps)
 >     cap = width (addrBus inps)
+
+Dual-port block RAMs:
+
+> dualBlockRam :: String -> (RamInputs, RamInputs) -> Lava (Sig, Sig)
+> dualBlockRam initFile (insA, insB)
+>   | widA == widB && capA == capB =
+>     do outA <- newSig widA
+>        outB <- newSig widB
+>        ramName <- newSigId
+>        newInst (DualBlockRam widA capA ramName initFile,
+>          [ramEn insA, writeEn insA, dataBus insA, addrBus insA,
+>           ramEn insB, writeEn insB, dataBus insB, addrBus insB], [outA, outB])
+>        return (outA, outB)
+>   | otherwise = error "dualBlockRam ports must be the same size"
+>   where
+>     widA = width (dataBus insA)
+>     widB = width (dataBus insB)
+>     capA = width (addrBus insA)
+>     capB = width (addrBus insB)
 
 Use signal y to drive signal x.
 
@@ -274,6 +294,9 @@ If expression:
 >   do z <- lit 0 (width x)
 >      x *=* z
 
+> log2 :: Integral a => a -> a
+> log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
+
 Some Combinators
 ================
 
@@ -290,12 +313,73 @@ Some Combinators
 > orBits :: [Sig] -> Lava Sig
 > orBits xs = do { z <- low ; treeM (<|>) z xs }
 
+> halve :: [a] -> ([a], [a])
+> halve xs
+>   | odd (length xs) = error "'halve' applied to odd-sized list"
+>   | otherwise = (take n xs, drop n xs)
+>   where n = length xs `div` 2
+
 > first :: Sig -> Lava Sig
 > first x =
 >   do x'  <- inv x
 >      one <- lit 1 (width x)
 >      y   <- x' <+> one
 >      x <&> y
+
+Arbiters
+========
+
+Fair arbiter.  Given two bits, isolate one hot bit.  Do this in a fair
+manner so that no client is starved access to the arbitrated resource.
+
+> arb :: Sig -> (Sig, Sig) -> Lava (Sig, Sig)
+> arb en (a, b) =
+>   do regIn          <- newSig 1
+>      prevChoiceWasA <- delayEn en regIn
+>      a'             <- inv a
+>      preferB        <- prevChoiceWasA <|> a'
+>      chooseB        <- b <&> preferB
+>      chooseB'       <- inv chooseB
+>      chooseA        <- a <&> chooseB'
+>      regIn         <== chooseA
+>      return (chooseA, chooseB)
+
+Generalisation of the two-input arbiter to N inputs, where N is a
+power of two.
+
+> arbTree :: Sig -> [Sig] -> Lava [Sig]
+> arbTree en [] = return []
+> arbTree en [x] = return [x]
+> arbTree en [x, y] = do
+>   (x', y') <- arb en (x, y)
+>   return [x', y']
+> arbTree en ins = do
+>   let (xs, ys) = halve ins
+>   oxs    <- orBits xs
+>   oys    <- orBits ys
+>   (a, b) <- arb en (oxs, oys)
+>   ena    <- en <&> a
+>   enb    <- en <&> b
+>   xs'    <- arbTree ena xs
+>   ys'    <- arbTree enb ys
+>   outs1  <- zipWithM (<&>) (repeat a) xs'
+>   outs2  <- zipWithM (<&>) (repeat b) ys'
+>   return (outs1 ++ outs2)
+
+Generalisation of the power-of-two-input arbiter to any number of inputs.
+
+> arbiter :: [Sig] -> Lava [Sig]
+> arbiter []  = return []
+> arbiter [x] = return [x]
+> arbiter ins = do
+>     zero <- low
+>     one  <- high
+>     outs <- arbTree one (ins ++ replicate diff zero)
+>     return (take n outs)
+>   where
+>     n = length ins
+>     m = log2 (length ins - 1) + 1
+>     diff = 2^m - n
 
 Code Generation
 ===============
@@ -405,8 +489,9 @@ Pure structural component instances:
 >   "assign " ++ sigId o ++ " = " ++ consperse " | "
 >     [ "((" ++ rep (width xs) (sigId x) ++ ") & " ++ sigId xs ++ ")"
 >     | (x, xs) <- pairs ins] ++ ";\n"
-> pureInst (BlockRam dw aw r, [en, we, d, a], [o]) =
+> pureInst (BlockRam dw aw r initFile, [en, we, d, a], [o]) =
 >   "AlteraBlockRamTrueMixed#(\n" ++
+>   "  .INIT_FILE(\"" ++ initFile ++ "\"),\n" ++
 >   "  .ADDR_WIDTH_A(" ++ show aw ++ "),\n" ++
 >   "  .ADDR_WIDTH_B(" ++ show aw ++ "),\n" ++
 >   "  .DATA_WIDTH_A(" ++ show dw ++ "),\n" ++
@@ -424,6 +509,27 @@ Pure structural component instances:
 >   "  .EN_B(0),\n" ++
 >   "  .DO_A(" ++ sigId o ++ "),\n" ++
 >   "  .DO_B());\n"
+> pureInst (DualBlockRam dw aw r initFile, [enA, weA, dA, aA,
+>                                           enB, weB, dB, aB], [oA, oB]) =
+>   "AlteraBlockRamTrueMixed#(\n" ++
+>   "  .INIT_FILE(\"" ++ initFile ++ "\"),\n" ++
+>   "  .ADDR_WIDTH_A(" ++ show aw ++ "),\n" ++
+>   "  .ADDR_WIDTH_B(" ++ show aw ++ "),\n" ++
+>   "  .DATA_WIDTH_A(" ++ show dw ++ "),\n" ++
+>   "  .DATA_WIDTH_B(" ++ show dw ++ "),\n" ++
+>   "  .NUM_ELEMS_A(" ++ show (2^aw) ++ "),\n" ++
+>   "  .NUM_ELEMS_B(" ++ show (2^aw) ++ ")) " ++ r ++ " (\n" ++
+>   "  .CLK(clock),\n" ++
+>   "  .DI_A(" ++ sigId dA ++ "),\n" ++
+>   "  .DI_B(" ++ sigId dB ++ "),\n" ++
+>   "  .ADDR_A(" ++ sigId aA ++ "),\n" ++
+>   "  .ADDR_B(" ++ sigId aB ++ "),\n" ++
+>   "  .WE_A(" ++ sigId weA ++ "),\n" ++
+>   "  .WE_B(" ++ sigId weB ++ "),\n" ++
+>   "  .EN_A(" ++  sigId enA ++ "),\n" ++
+>   "  .EN_B(" ++  sigId enB ++ "),\n" ++
+>   "  .DO_A(" ++ sigId oA ++ "),\n" ++
+>   "  .DO_B(" ++ sigId oB ++ ");\n"
 > pureInst other = ""
 
 Synchronous (clocked) component instances

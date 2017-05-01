@@ -21,7 +21,7 @@ Static Timing Analysis
 
 Try to determine at compile-time the duration (number of clock ticks)
 needed for a statement to complete.  Return Nothing if duration cannot
-be determined or is infinite.
+be determined.
 
 > time :: Stm -> Maybe Int
 > time Skip = Just 0
@@ -47,6 +47,7 @@ be determined or is infinite.
 > time (GPrint w x) = Nothing
 > time (Fetch r e) = Just 0
 > time (Store r e1 e2) = Just 0
+> time (LoadRom x r p e) = Nothing
 > time Halt = Nothing
 
 Is a given statement known to complete in finite time?
@@ -398,6 +399,7 @@ Create a signal (of the correct width) for each identifier:
 >       ++ [(v, 1) | Decl v TLock _ <- decls p]
 >       ++ [(v, 1) | v <- labels p]
 >       ++ [(v, dw) | Decl v (TRam aw dw) _ <- decls p]
+>       ++ [(v, dw) | Decl v (TRom aw dw) _ <- decls p]
 
 An item of a schedule describes an action to be performed on an
 identifier at a specified point in time.  It is is a pair containing a
@@ -412,6 +414,9 @@ trigger signal and an action.
 >   | StoreRam Id Sig Sig  {- Write to RAM at address given value -}
 >   | GrabLock Id Sig Sig  {- Ask for and grab given lock -}
 >   | ReleaseLock Id       {- Release given lock -}
+>   | LoadRomPort          {- Load from ROM port at address -}
+>       Id Id              -- ROM and port
+>       Sig Sig Sig        -- Address, loaded value, and done signal
 
 Compile a statement to give a schedule.
 
@@ -524,6 +529,12 @@ Compile a statement to give a schedule.
 >        return (go, sched)
 >   compStm go (Release lock) =
 >     return (go, [(go, ReleaseLock lock)])
+>   compStm go (LoadRom x r p e) =
+>     do done      <- newSig 1
+>        romOutput <- newSig (width (env!x))
+>        addr      <- compExp e
+>        return (done, [ (go, LoadRomPort r p addr romOutput done)
+>                      , (done, AssignReg x romOutput) ])
 >
 >   compExp :: Exp -> Lava Sig
 >   compExp (Lit Nothing n) = error "literal width unknown"
@@ -584,19 +595,21 @@ loops may exists from a signal back to itself.)
 >      sequence_ [ram r | r <- rams]
 >      -- Drive lock-related signals
 >      sequence_ [lock l | l <- locks]
+>      --  Drive ROM-related signals
+>      sequence_ [rom r | r <- roms]
 >   where
 >     regs = [(v, init) | Decl v (TReg n) init <- decls p]
 >         ++ [(v, init) | Decl v (TLab _) init <- decls p]
 >         ++ [(v, init) | Decl v (TPtr _ _) init <- decls p]
->     reg (r, init)
->       | List.null assigns = return ()
->       | otherwise =
->           do regIn <- mux assigns
->              enable <- orBits [go | (go, x) <- assigns]
->              out <- case init of
->                       IntInit i -> delayInitEn i enable regIn
->                       Uninit -> delayEn enable regIn
->              (env!r) <== out
+>     reg (r, init) =
+>         do let w = width (env!r)
+>            regIn <- if List.null assigns then lit 0 w else mux assigns
+>            enable <- orBits [go | (go, x) <- assigns]
+>            out <- case init of
+>                     StrInit _ -> error "Register has string initialiser"
+>                     IntInit i -> delayInitEn i enable regIn
+>                     Uninit -> delayEn enable regIn
+>            (env!r) <== out
 >       where assigns = [(go, x) | (go, AssignReg v x) <- s, v == r]
 >
 >     labs = labels p
@@ -604,19 +617,26 @@ loops may exists from a signal back to itself.)
 >       do trig <- orBits [go | (go, JumpToLabel v) <- s, v == l]
 >          (env!l) <== trig
 >
->     rams = [v | Decl v (TRam _ _) _ <- decls p]
->     ram r =
+>     rams = [(v, init) | Decl v (TRam _ _) init <- decls p]
+>     ram (r, init) =
 >       do readEn  <- orBits [go | (go, _) <- reads]
 >          writeEn <- orBits [go | (go, _, _) <- writes]
 >          en      <- readEn <|> writeEn
 >          dataIn  <- mux [(go, x) | (go, i, x) <- writes]
 >          addrIn  <- mux $ [(go, i) | (go, i) <- reads]
 >                        ++ [(go, i) | (go, i, x) <- writes]
->          out     <- blockRam (RamInputs en writeEn dataIn addrIn)
+>          out     <- blockRam (initFile init)
+>                              (RamInputs en writeEn dataIn addrIn)
 >          (env!r) <== out
 >       where
 >         reads  = [(go, i) | (go, FetchRam r1 i) <- s, r == r1]
 >         writes = [(go, i, x) | (go, StoreRam r1 i x) <- s, r == r1]
+>
+>     initFile init =
+>       case init of
+>         StrInit s -> s
+>         Uninit    -> "UNUSED"
+>         IntInit _ -> error "Memory has integer initialiser"
 >
 >     locks = [v | Decl v TLock _ <- decls p]
 >     lock l =
@@ -633,6 +653,79 @@ loops may exists from a signal back to itself.)
 >         grabs = [ (ask, grab, avail)
 >                 | (ask, GrabLock lock avail grab) <- s, lock == l ]
 >         rels  = [ go | (go, ReleaseLock lock) <- s, lock == l ]
+>
+>     -- When dealing with ROMs, there are two kinds of port:
+>     -- (1) a ROM may have any number of abstract ports, with
+>     -- accesses to the same abstract port being exclusive in time;
+>     -- (2) a ROM is compiled down to any number of Block ROMs which
+>     -- has two physical ports.
+>     roms = [(v, init) | Decl v (TRom _ _) init <- decls p]
+>     rom (r, init) = mapM_ genBRAM $
+>          chunks 2 (chunks romPortsPerBRAMPort romLoadsByAbsPort)
+>       where
+>         acts = [ (go, a, done, regIn, p)
+>                | (go, LoadRomPort r1 p a regIn done) <- s, r == r1]
+>
+>         -- Get the port name
+>         getPort (LoadRomPort r p a regIn done) = p
+>
+>         -- Group loads to the same abstract port together
+>         romLoadsByAbsPort = Map.elems $ Map.fromListWith (++)
+>             [ (p, [(go, a, done, regIn)])
+>             | (go, a, done, regIn, p) <- acts]
+>
+>         romPortsPerBRAMPort :: Int
+>         romPortsPerBRAMPort = fromInteger $
+>           Map.findWithDefault 2 "RomPortsPerBlockRamPort" (opts p)
+>
+>         -- Generate logic for each abstract port
+>         absPort acts = do
+>           addr   <- mux [(go, a) | (go, a, done, regIn) <- acts]
+>           let gos = [go | (go, a, done, regIn) <- acts]
+>           any    <- orBits gos
+>           chosen <- delayEn any addr
+>           arbOut <- newSig 1
+>           flops  <- mapM (`setReset` arbOut) gos
+>           ds     <- zipWithM (<&>) flops (repeat arbOut)
+>           ds'    <- mapM delay ds
+>           let dones = [done | (go, a, done, regIn) <- acts]
+>           sequence_ [done <== d | (done, d) <- zip dones ds']
+>           arbIn  <- orBits flops
+>           let regIns = [regIn | (go, a, done, regIn) <- acts]
+>           return (chosen, arbIn, arbOut, regIns)
+>
+>         -- Generate logic for each physical port
+>         phyPort acts = do
+>           ps <- mapM absPort acts
+>           sel <- arbiter [arbIn | (_, arbIn, _, _) <- ps]
+>           zipWithM_ (<==) [arbOut | (_, _, arbOut, _) <- ps] sel
+>           addr <- mux (zip sel [addr | (addr, _, _, _) <- ps])
+>           return (addr, concat [regIns | (_, _, _, regIns) <- ps])
+>
+>         -- Generate a physical BRAM to store ROM data
+>         genBRAM [acts] = do
+>           (addr, regIns) <- phyPort acts
+>           en <- high
+>           writeEn <- low
+>           zero <- lit 0 (width (env!r))
+>           out <- blockRam (initFile init) (RamInputs en writeEn zero addr)
+>           sequence_ [regIn <== out | regIn <- regIns]
+>         genBRAM [actsA, actsB] = do
+>           (addrA, regInsA) <- phyPort actsA
+>           (addrB, regInsB) <- phyPort actsB
+>           en <- high
+>           writeEn <- low 
+>           zero <- lit 0 (width (env!r))
+>           (outA, outB) <- dualBlockRam (initFile init)
+>             ( RamInputs en writeEn zero addrA
+>             , RamInputs en writeEn zero addrB )
+>           sequence_ [regIn <== outA | regIn <- regInsA]
+>           sequence_ [regIn <== outB | regIn <- regInsB]
+>
+>         -- Convert list to a list of chunks of size N
+>         chunks :: Int -> [a] -> [[a]]
+>         chunks n [] = []
+>         chunks n xs = take n xs : chunks n (drop n xs)
 
 Compile a program to a netlist.
  
@@ -760,6 +853,12 @@ well-typed.  This function is not efficient.
 >         TRam aw dw ->
 >           Store r (tcExp dw i) (tcExp aw e)
 >         other -> typeError (show (Store r i e))
+>     tc (LoadRom x r p e) =
+>       case env!r of
+>         TRom aw dw ->
+>           let (Var x') = tcExp dw (Var x) in
+>             LoadRom x' r p (tcExp aw e)
+>         other -> typeError (show (LoadRom x r p e))
 >     {- Stack ops are weakly-typed due to chunking feature -}
 >     tc (Push s x) = Push s x
 >     tc (Pop s x) = Pop s x

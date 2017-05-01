@@ -8,6 +8,7 @@ import Text.ParserCombinators.Parsec hiding (many, option, (<|>))
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as T
+import qualified Data.Map as Map
   
 page = T.makeTokenParser $ emptyDef
   { commentLine      = "--"
@@ -21,7 +22,7 @@ page = T.makeTokenParser $ emptyDef
                         "inv", "declare", "in", "reg", "label", "fork",
                         "lock", "of", "fetch", "ram", "from", "to",
                         "data", "push", "pop", "top", "bits", "end",
-                        "do", "return"
+                        "do", "return", "load", "rom", "opt"
                        ]
   , caseSensitive    = True
   }
@@ -40,6 +41,7 @@ operator = T.operator page
 charLiteral = T.charLiteral page
 stringLiteral = T.stringLiteral page
 lexeme = T.lexeme page
+whitespace = T.whiteSpace page
 
 -- Expressions
 
@@ -115,6 +117,10 @@ stmt'  = pure Skip <* reserved "skip"
      <|> pure Release <*> (reserved "release" *> var)
      <|> pure Print <*> (reserved "print" *> var)
      <|> pure Fetch <*> (reserved "fetch" *> var) <*> brackets expr
+     <|> pure LoadRom <*> (reserved "load" *> var)
+                      <*> (var <* reservedOp ":")
+                      <*> var
+                      <*> brackets expr
      <|> pure Push <*> (reserved "push" *> var) <*> many1 var
      <|> pure Pop <*> (reserved "pop" *> var) <*> many1 var
      <|> pure Halt <* reserved "halt"
@@ -136,19 +142,18 @@ assign =
 
 -- Declarations
 
-declarations :: Parser [Decl]
-declarations = many decl
-
 decl :: Parser Decl
 decl = pure Decl <*> (reserved "var" *> var <* reserved ":")
                  <*> typ <*> initial
 
 initial :: Parser Init
 initial =
-  do m <- optionMaybe (reserved "=" *> natural)
+  do m <- optionMaybe (reserved ":=")
      case m of
        Nothing -> return Uninit
-       Just i  -> return (IntInit i)
+       Just _  ->
+            pure IntInit <*> natural
+        <|> pure StrInit <*> stringLiteral
 
 typ :: Parser Type
 typ = pure TReg <*> (reserved "reg" *> nat)
@@ -156,19 +161,46 @@ typ = pure TReg <*> (reserved "reg" *> nat)
   <|> pure (TLab []) <* reserved "label"
   <|> pure TLock <* reserved "lock"
   <|> pure TRam <*> (reserved "ram" *> nat) <*> nat
+  <|> pure TRom <*> (reserved "rom" *> nat) <*> nat
 
 nat :: Parser Int
 nat = pure fromIntegral <*> natural
 
 log2 :: Integral a => a -> a
 log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
-    
+ 
+-- Parse a compiler option
+
+compilerOpt :: Parser CompilerOpts
+compilerOpt =
+  do reserved "opt"
+     key <- identifier
+     reserved "="
+     val <- natural
+     return (Map.fromList [(key, val)])
+   
+-- Parse program prelude
+
+prelude :: Parser (CompilerOpts, [Decl])
+prelude =
+  do items <- many preludeItem
+     let (opts, decls) = unzip items
+     return (Map.unions opts, concat decls)
+
+preludeItem :: Parser (CompilerOpts, [Decl])
+preludeItem =
+      do { o <- compilerOpt ; return (o, []) }
+  <|> do { d <- decl ; return (Map.empty, [d]) }
+
 -- Programs
 
 prog :: Parser Prog
-prog = pure Prog <*> declarations
-                 <*> stmt
- 
+prog =
+  do whitespace
+     (opts, ds) <- prelude
+     s <- stmt
+     return (Prog opts ds s)
+
 parseProgFile :: SourceName -> IO Prog
 parseProgFile f = parseFromFile (prog <* eof) f >>= \result ->
   case result of

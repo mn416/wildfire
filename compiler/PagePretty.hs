@@ -2,6 +2,7 @@ module PagePretty (putPageProg, prettyPageProg) where
 
 import PageSyntax
 import Text.PrettyPrint
+import qualified Data.Map as Map
   
 putPageProg :: Prog -> IO ()
 putPageProg = putStrLn . prettyPageProg
@@ -13,7 +14,9 @@ prettyPageProg p = renderStyle style (prettyProg p)
 
 prettyProg :: Prog -> Doc
 prettyProg p =
-     vcat (map prettyDecl (decls p))
+     vcat [ text "opt " <+> text k <+> text "=" <+> text (show v)
+          | (k, v) <- Map.toList (opts p) ]
+  $$ vcat (map prettyDecl (decls p))
   $$ prettyStm (code p)
 
 prettyType :: Type -> Doc
@@ -22,6 +25,7 @@ prettyType (TPtr w _)   = text "ptr" <> text (show w)
 prettyType (TLab labs)  = text "label" <+> text "=" <+> text (show labs)
 prettyType TLock        = text "lock"
 prettyType (TRam aw dw) = text "ram" <+> text (show aw) <+> text (show dw)
+prettyType (TRom aw dw) = text "rom" <+> text (show aw) <+> text (show dw)
 
 prettyDecl :: Decl -> Doc
 prettyDecl (Decl v ty init) =
@@ -29,7 +33,8 @@ prettyDecl (Decl v ty init) =
 
 prettyInit :: Init -> Doc
 prettyInit (Uninit) = text ""
-prettyInit (IntInit i) = char '=' <+> text (show i)
+prettyInit (IntInit i) = text ":=" <+> text (show i)
+prettyInit (StrInit s) = text ":=" <+> text s
 
 prettyStm :: Stm -> Doc
 prettyStm Skip = text "skip"
@@ -65,6 +70,9 @@ prettyStm (Store v e1 e2) = text v <+> text "[" <> prettyExp e1 <> text "]"
                                    <+> text ":=" <+> prettyExp e2
 prettyStm (Push m vs) = text "push" <+> text m <+> hsep (map text vs)
 prettyStm (Pop m vs) = text "pop" <+> text m <+> hsep (map text vs)
+prettyStm (LoadRom x r p e) =
+  text "loadrom" <+> text x <+> text (r ++ ":" ++ p) <+>
+    text "[" <+> prettyExp e <+> text "]"
 prettyStm Halt = text "halt"
 
 prettyExp :: Exp -> Doc
