@@ -21,8 +21,8 @@ page = T.makeTokenParser $ emptyDef
                         "goto", "acquire", "release", "print", "while",
                         "inv", "declare", "in", "reg", "label", "fork",
                         "lock", "of", "fetch", "ram", "from", "to",
-                        "data", "push", "pop", "top", "bits", "end",
-                        "do", "return", "load", "rom", "opt"
+                        "data", "push", "pop", "top", "bits",
+                        "end", "do", "return", "load", "rom", "opt"
                        ]
   , caseSensitive    = True
   }
@@ -70,7 +70,8 @@ expr' = pure (Lit Nothing) <*> natural
     <|> pure Var <*> var
     <|> pure Ptr <*> (reservedOp "^" *> var)
     <|> pure Lab <*> stmtLabel
-    <|> pure RamOutput <*> (reserved "data" *> var)
+    <|> (pure RamOutput <* reserved "data" <* reservedOp "(") <*>
+          var <*> (reservedOp ":" *> ramPort <* reservedOp ")")
     <|> pure Select <*> (reserved "bits" *> nat)
                     <*> (reserved "to" *> nat)
                     <*> (reserved "of" *> expr)
@@ -116,7 +117,9 @@ stmt'  = pure Skip <* reserved "skip"
 --   <|> pure Acquire <*> (reserved "acquire" *> var) <*> return Nothing
      <|> pure Release <*> (reserved "release" *> var)
      <|> pure Print <*> (reserved "print" *> var)
-     <|> pure Fetch <*> (reserved "fetch" *> var) <*> brackets expr
+     <|> pure Fetch <*> (reserved "fetch" *> var)
+                    <*> (reservedOp ":" *> ramPort)
+                    <*> brackets expr
      <|> pure LoadRom <*> (reserved "load" *> var)
                       <*> (var <* reservedOp ":")
                       <*> var
@@ -133,12 +136,13 @@ goto =
 
 assign =
   do v <- var
-     i <- (pure Just <*> brackets expr) <|> pure Nothing
-     reservedOp ":="
-     e <- expr
-     case i of
-       Nothing -> return (v := e)
-       Just x  -> return (Store v x e)
+     m <- optionMaybe (reservedOp ":")
+     case m of
+       Nothing -> pure (v :=) <*> (reservedOp ":=" *> expr)
+       Just _  -> pure (Store v) <*> ramPort <*>
+                    brackets expr <*> (reservedOp ":=" *> expr)
+
+ramPort = (string "A" *> return A) <|> (string "B" *> return B)
 
 -- Declarations
 

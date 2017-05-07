@@ -68,13 +68,21 @@ Statements.
 >   | Release Id                {- Release lock -}
 >   | Print Id                  {- Send byte to the serial port -}
 >   | GPrint Width Id           {- Send bit-string to the serial port -}
->   | Fetch Id Exp              {- Read from Block RAM -}
->   | Store Id Exp Exp          {- Write to Block RAM -}
->   | LoadRom Id Id Id Exp      {- Load from ROM:port into register -}
+>   | Fetch Id RamPort Exp      {- Read from RAM port -}
+>   | Store Id RamPort Exp Exp  {- Write to RAM port -}
+>   | LoadRom Id Id RomPort Exp {- Load from ROM port into register -}
 >   | Push Id [Id]              {- Push onto stack given values -}
 >   | Pop Id [Id]               {- Pop top stack elements -}
 >   | Halt                      {- Halt execution -}
 >     deriving Show
+
+RAM port:
+
+> data RamPort = A | B deriving (Eq, Show, Ord)
+
+ROM port:
+
+> type RomPort = String
 
 The list of identifiers in the choice operator are the live variables
 in the second branch.
@@ -90,7 +98,7 @@ Expressions (arithmetic & conditions).
 >   | Ptr Id                    {- Pointer to register -}
 >   | Apply1 UnaryOp Exp        {- Unary operator application -}
 >   | Apply2 BinOp Exp Exp      {- Binary operator application -}
->   | RamOutput Id              {- Refer to the output of a RAM -}
+>   | RamOutput Id RamPort      {- Refer to the output of a RAM -}
 >   | Select Int Int Exp        {- Bit selection -}
 >   | Concat Exp Exp            {- Bit-string concatenation -}
 >   | Available [Id]            {- Are all locks in set available? -}
@@ -136,10 +144,11 @@ Traversals
 > onExp :: (Exp -> Exp) -> Stm -> Stm
 > onExp f s = descend (onExp f) $
 >   case s of 
->     x := e        -> x := f e
->     IndAssign x e -> IndAssign x (f e)
->     Ifte e s1 s2  -> Ifte (f e) s1 s2
->     While e s     -> While (f e) s
->     Fetch m e     -> Fetch m (f e)
->     Store m e1 e2 -> Store m (f e1) (f e2)
->     other         -> other
+>     x := e            -> x := f e
+>     IndAssign x e     -> IndAssign x (f e)
+>     Ifte e s1 s2      -> Ifte (f e) s1 s2
+>     While e s         -> While (f e) s
+>     Fetch m p e       -> Fetch m p (f e)
+>     Store m p e1 e2   -> Store m p (f e1) (f e2)
+>     LoadRom x m p e   -> LoadRom x m p (f e)
+>     other             -> other

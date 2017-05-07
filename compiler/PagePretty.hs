@@ -64,10 +64,12 @@ prettyStm (Acquire v locks) =
 prettyStm (Release v) = text "release" <+> text v
 prettyStm (Print v) = text "print" <+> text v
 prettyStm (GPrint _ v) = text "gprint" <+> text v
-prettyStm (Fetch v e) =
-  text "fetch" <+> text v <+> text "[" <+> prettyExp e <+> text "]"
-prettyStm (Store v e1 e2) = text v <+> text "[" <> prettyExp e1 <> text "]"
-                                   <+> text ":=" <+> prettyExp e2
+prettyStm (Fetch v p e) =
+  text "fetch" <+> text (v ++ ":" ++ show p) <+>
+  text "[" <+> prettyExp e <+> text "]"
+prettyStm (Store v p e1 e2) =
+  text (v ++ ":" ++ show p) <+> text "[" <> prettyExp e1 <> text "]"
+    <+> text ":=" <+> prettyExp e2
 prettyStm (Push m vs) = text "push" <+> text m <+> hsep (map text vs)
 prettyStm (Pop m vs) = text "pop" <+> text m <+> hsep (map text vs)
 prettyStm (LoadRom x r p e) =
@@ -87,7 +89,8 @@ prettyExp (Apply1 (Shr n) e1) =
   parens (prettyExp e1 <+> text ">>" <+> text (show n))
 prettyExp (Apply1 f e1) = parens (op1 f <+> prettyExp e1)
 prettyExp (Apply2 f e1 e2) = parens (prettyExp e1 <+> op2 f <+> prettyExp e2)
-prettyExp (RamOutput v) = text "data" <+> text v
+prettyExp (RamOutput v A) = text ("data(" ++ v ++ ":A)")
+prettyExp (RamOutput v B) = text ("data(" ++ v ++ ":B)")
 prettyExp (Select i j e) =
       text "bits" <+> text (show i) <+> text "to"
   <+> text (show j) <+> text "of" <+> prettyExp e

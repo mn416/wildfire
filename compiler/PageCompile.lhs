@@ -45,8 +45,8 @@ be determined.
 > time (Release x) = Just 0
 > time (Print x) = Nothing
 > time (GPrint w x) = Nothing
-> time (Fetch r e) = Just 0
-> time (Store r e1 e2) = Just 0
+> time (Fetch r p e) = Just 0
+> time (Store r p e1 e2) = Just 0
 > time (LoadRom x r p e) = Nothing
 > time Halt = Nothing
 
@@ -251,7 +251,7 @@ The first argument to pushOneCode is the address width.
 > pushOneCode :: Int -> Id -> Stm
 > pushOneCode w s =
 >      Label (s ++ "_push")
->   :> Store s (Apply2 Add (Var sp) (Lit (Just w) 1)) (Var top)
+>   :> Store s A (Apply2 Add (Var sp) (Lit (Just w) 1)) (Var top)
 >   :> sp := Apply2 Add (Var sp) (Lit (Just w) 1)
 >   :> Halt
 >   where
@@ -266,8 +266,8 @@ The first argument to popOneCode is the address width.
 > popOneCode :: Int -> Id -> Stm
 > popOneCode w s =
 >      Label (s ++ "_pop")
->   :> top := RamOutput s
->   :> Fetch s (Apply2 Sub (Var sp) (Lit (Just w) 1))
+>   :> top := RamOutput s A
+>   :> Fetch s A (Apply2 Sub (Var sp) (Lit (Just w) 1))
 >   :> sp := Apply2 Sub (Var sp) (Lit (Just w) 1)
 >   :> Halt
 >   where
@@ -398,7 +398,8 @@ Create a signal (of the correct width) for each identifier:
 >       ++ [(v, length regs) | Decl v (TPtr _ regs) _ <- decls p]
 >       ++ [(v, 1) | Decl v TLock _ <- decls p]
 >       ++ [(v, 1) | v <- labels p]
->       ++ [(v, dw) | Decl v (TRam aw dw) _ <- decls p]
+>       ++ concat [ [(v ++ ":A", dw), (v ++ ":B", dw)]
+>                 | Decl v (TRam aw dw) _ <- decls p]
 >       ++ [(v, dw) | Decl v (TRom aw dw) _ <- decls p]
 
 An item of a schedule describes an action to be performed on an
@@ -408,15 +409,15 @@ trigger signal and an action.
 > type Schedule = [(Sig, Action)]
 
 > data Action =
->     AssignReg Id Sig     {- Assigment of signal to register -}
->   | JumpToLabel Id       {- Jump to label id -}
->   | FetchRam Id Sig      {- Read from RAM at address -}
->   | StoreRam Id Sig Sig  {- Write to RAM at address given value -}
->   | GrabLock Id Sig Sig  {- Ask for and grab given lock -}
->   | ReleaseLock Id       {- Release given lock -}
->   | LoadRomPort          {- Load from ROM port at address -}
->       Id Id              -- ROM and port
->       Sig Sig Sig        -- Address, loaded value, and done signal
+>     AssignReg Id Sig            {- Assigment of signal to register -}
+>   | JumpToLabel Id              {- Jump to label id -}
+>   | FetchRam Id RamPort Sig     {- Read from RAM at address -}
+>   | StoreRam Id RamPort Sig Sig {- Write to RAM at address given value -}
+>   | GrabLock Id Sig Sig         {- Ask for and grab given lock -}
+>   | ReleaseLock Id              {- Release given lock -}
+>   | LoadRomPort                 {- Load from ROM port at address -}
+>       Id RomPort                -- ROM and port
+>       Sig Sig Sig               -- Address, loaded value, and done signal
 
 Compile a statement to give a schedule.
 
@@ -508,13 +509,13 @@ Compile a statement to give a schedule.
 >        y <- compExp e
 >        let sched = [(en, AssignReg x y) | (x, en) <- zip (ptrTypes!v) ens]
 >        return (go, sched)
->   compStm go (Fetch r e) =
+>   compStm go (Fetch r p e) =
 >     do i <- compExp e
->        return (go, [(go, FetchRam r i)])
->   compStm go (Store r e1 e2) =
+>        return (go, [(go, FetchRam r p i)])
+>   compStm go (Store r p e1 e2) =
 >     do i <- compExp e1
 >        x <- compExp e2
->        return (go, [(go, StoreRam r i x)])
+>        return (go, [(go, StoreRam r p i x)])
 >   compStm go Halt =
 >     do z <- low
 >        return (z, [])
@@ -565,7 +566,7 @@ Compile a statement to give a schedule.
 >          Lte -> x1 *<=* x2
 >          Gt  -> x1 *>* x2
 >          Gte -> x1 *>=* x2
->   compExp (RamOutput r) = return (env!r)
+>   compExp (RamOutput r p) = return (env!(r ++ ":" ++ show p))
 >   compExp (Select from to e) =
 >     do compExp e >>= select from to
 >   compExp (Concat e1 e2) =
@@ -619,18 +620,29 @@ loops may exists from a signal back to itself.)
 >
 >     rams = [(v, init) | Decl v (TRam _ _) init <- decls p]
 >     ram (r, init) =
->       do readEn  <- orBits [go | (go, _) <- reads]
->          writeEn <- orBits [go | (go, _, _) <- writes]
->          en      <- readEn <|> writeEn
->          dataIn  <- mux [(go, x) | (go, i, x) <- writes]
->          addrIn  <- mux $ [(go, i) | (go, i) <- reads]
->                        ++ [(go, i) | (go, i, x) <- writes]
->          out     <- blockRam (initFile init)
->                              (RamInputs en writeEn dataIn addrIn)
->          (env!r) <== out
+>       do readEnA  <- orBits [go | (go, _) <- readsA]
+>          writeEnA <- orBits [go | (go, _, _) <- writesA]
+>          enA      <- readEnA <|> writeEnA
+>          dataInA  <- muxz w [(go, x) | (go, i, x) <- writesA]
+>          addrInA  <- muxz w $ [(go, i) | (go, i) <- readsA]
+>                            ++ [(go, i) | (go, i, x) <- writesA]
+>          readEnB  <- orBits [go | (go, _) <- readsB]
+>          writeEnB <- orBits [go | (go, _, _) <- writesB]
+>          enB      <- readEnB <|> writeEnB
+>          dataInB  <- muxz w [(go, x) | (go, i, x) <- writesB]
+>          addrInB  <- muxz w $ [(go, i) | (go, i) <- readsB]
+>                            ++ [(go, i) | (go, i, x) <- writesB]
+>          (outA, outB) <- dualBlockRam (initFile init)
+>                              (RamInputs enA writeEnA dataInA addrInA,
+>                               RamInputs enB writeEnB dataInB addrInB)
+>          (env!(r ++ ":A")) <== outA
+>          (env!(r ++ ":B")) <== outB
 >       where
->         reads  = [(go, i) | (go, FetchRam r1 i) <- s, r == r1]
->         writes = [(go, i, x) | (go, StoreRam r1 i x) <- s, r == r1]
+>         w       = width (env!(r ++ ":A"))
+>         readsA  = [(go, i) | (go, FetchRam r1 A i) <- s, r == r1]
+>         writesA = [(go, i, x) | (go, StoreRam r1 A i x) <- s, r == r1]
+>         readsB  = [(go, i) | (go, FetchRam r1 B i) <- s, r == r1]
+>         writesB = [(go, i, x) | (go, StoreRam r1 B i x) <- s, r == r1]
 >
 >     initFile init =
 >       case init of
@@ -766,7 +778,7 @@ well-typed.  This function is not efficient.
 >         other  -> Nothing
 >     widthOf (Apply1 op e) = widthOf e
 >     widthOf (Apply2 op e1 e2) = widthOf e1 `mplus` widthOf e2
->     widthOf (RamOutput m) = dataWidth (env!m)
+>     widthOf (RamOutput m p) = dataWidth (env!m)
 >     widthOf (Select from to e) = Just ((from+1) - to)
 >     widthOf (Concat e1 e2) = return (+) `ap` widthOf e1 `ap` widthOf e2
 >
@@ -786,7 +798,7 @@ well-typed.  This function is not efficient.
 >                 Nothing -> typeErrorW (show e) w
 >                 Just w -> Apply2 op (tcExp w e1) (tcExp w e2)
 >           | not (isCmpOp op) = Apply2 op (tcExp w e1) (tcExp w e2)
->         ch (RamOutput m)
+>         ch (RamOutput m p)
 >           | dataWidth (env!m) == Just w = e
 >         ch (Select from to e)
 >           | w == ((from+1) - to) =
@@ -844,15 +856,15 @@ well-typed.  This function is not efficient.
 >       | (env!x) == TReg 8 = Print x
 >     tc (GPrint w x) | isNat tx && regWidth tx == w = GPrint w x
 >       where tx = env!x
->     tc (Fetch r e) =
+>     tc (Fetch r p e) =
 >       case env!r of
->         TRam aw dw -> Fetch r (tcExp aw e)
->         other -> typeError (show (Fetch r e))
->     tc (Store r i e) =
+>         TRam aw dw -> Fetch r p (tcExp aw e)
+>         other -> typeError (show (Fetch r p e))
+>     tc (Store r p i e) =
 >       case env!r of
 >         TRam aw dw ->
->           Store r (tcExp dw i) (tcExp aw e)
->         other -> typeError (show (Store r i e))
+>           Store r p (tcExp dw i) (tcExp aw e)
+>         other -> typeError (show (Store r p i e))
 >     tc (LoadRom x r p e) =
 >       case env!r of
 >         TRom aw dw ->

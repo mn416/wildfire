@@ -15,7 +15,7 @@ A Target Language for Hardware Compilation
 > , delay, delayEn, delayInit, delayInitEn, setReset
 > , blockRam, dualBlockRam, RamInputs(..)
 > , andBits, orBits, treeM, treeM1
-> , mux, (?), mask, width, isZero, arbiter
+> , mux, muxz, (?), mask, width, isZero, arbiter
 > , writeVerilog
 > ) where
 
@@ -278,6 +278,10 @@ Multiplexer:
 >   where
 >     w = width (snd (head ins))
 
+> muxz :: Width -> [(Sig, Sig)] -> Lava Sig
+> muxz w [] = lit 0 w
+> muxz w xs = mux xs
+
 If expression:
 
 > cond ? (a, b) =
@@ -529,7 +533,7 @@ Pure structural component instances:
 >   "  .EN_A(" ++  sigId enA ++ "),\n" ++
 >   "  .EN_B(" ++  sigId enB ++ "),\n" ++
 >   "  .DO_A(" ++ sigId oA ++ "),\n" ++
->   "  .DO_B(" ++ sigId oB ++ ");\n"
+>   "  .DO_B(" ++ sigId oB ++ "));\n"
 > pureInst other = ""
 
 Synchronous (clocked) component instances
