@@ -618,27 +618,26 @@ loops may exists from a signal back to itself.)
 >       do trig <- orBits [go | (go, JumpToLabel v) <- s, v == l]
 >          (env!l) <== trig
 >
->     rams = [(v, init) | Decl v (TRam _ _) init <- decls p]
->     ram (r, init) =
+>     rams = [(v, aw, dw, init) | Decl v (TRam aw dw) init <- decls p]
+>     ram (r, aw, dw, init) =
 >       do readEnA  <- orBits [go | (go, _) <- readsA]
 >          writeEnA <- orBits [go | (go, _, _) <- writesA]
 >          enA      <- readEnA <|> writeEnA
->          dataInA  <- muxz w [(go, x) | (go, i, x) <- writesA]
->          addrInA  <- muxz w $ [(go, i) | (go, i) <- readsA]
->                            ++ [(go, i) | (go, i, x) <- writesA]
+>          dataInA  <- muxz dw [(go, x) | (go, i, x) <- writesA]
+>          addrInA  <- muxz aw $ [(go, i) | (go, i) <- readsA]
+>                             ++ [(go, i) | (go, i, x) <- writesA]
 >          readEnB  <- orBits [go | (go, _) <- readsB]
 >          writeEnB <- orBits [go | (go, _, _) <- writesB]
 >          enB      <- readEnB <|> writeEnB
->          dataInB  <- muxz w [(go, x) | (go, i, x) <- writesB]
->          addrInB  <- muxz w $ [(go, i) | (go, i) <- readsB]
->                            ++ [(go, i) | (go, i, x) <- writesB]
+>          dataInB  <- muxz dw [(go, x) | (go, i, x) <- writesB]
+>          addrInB  <- muxz aw $ [(go, i) | (go, i) <- readsB]
+>                             ++ [(go, i) | (go, i, x) <- writesB]
 >          (outA, outB) <- dualBlockRam (initFile init)
 >                              (RamInputs enA writeEnA dataInA addrInA,
 >                               RamInputs enB writeEnB dataInB addrInB)
 >          (env!(r ++ ":A")) <== outA
 >          (env!(r ++ ":B")) <== outB
 >       where
->         w       = width (env!(r ++ ":A"))
 >         readsA  = [(go, i) | (go, FetchRam r1 A i) <- s, r == r1]
 >         writesA = [(go, i, x) | (go, StoreRam r1 A i x) <- s, r == r1]
 >         readsB  = [(go, i) | (go, FetchRam r1 B i) <- s, r == r1]
