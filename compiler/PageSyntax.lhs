@@ -107,7 +107,6 @@ Expressions (arithmetic & conditions).
 > data UnaryOp =
 >     Inv                {- Negation -}
 >   | Shl Int | Shr Int  {- Constant left and right shifts -}
->   | First              {- Return first high bit -}
 >     deriving Show
 
 > data BinOp =

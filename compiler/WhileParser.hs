@@ -19,7 +19,7 @@ page = T.makeTokenParser $ emptyDef
   , opStart          = opLetter haskellStyle
   , opLetter         = oneOf "+-*/=<>;:|@.^~?"
   , reservedNames    = ["skip", "if", "then", "else", "end",
-                        "while", "declare", "in", "fail", "halt",
+                        "while", "declare", "in", "fail",
                         "opt", "var"]
   , caseSensitive    = True
   }
@@ -90,13 +90,21 @@ stmt = buildExpressionParser stmtOpTable stmt'
 
 stmt' :: Parser Stm
 stmt'  = pure Skip <* reserved "skip"
-     <|> pure (:=) <*> (identifier <* reservedOp ":=") <*> expr
      <|> ifStmt
      <|> pure While <*> (reserved "while" *> expr <* reserved "do") <*>
            (stmt <* reserved "end")
      <|> pure Fail <* reserved "fail"
-     <|> pure Halt <* reserved "halt"
+--   <|> pure Halt <* reserved "halt"
      <|> parens stmt
+     <|> do x <- identifier
+            m <- optionMaybe (brackets expr)
+            reservedOp ":="
+            case m of
+              Nothing -> try (pure (ArrayLookup RW x) <*>
+                           identifier <*> brackets expr)
+                     <|> pure (x :=) <*> expr
+              Just e  -> do rhs <- expr
+                            return (ArrayAssign x e rhs)
 
 ifStmt :: Parser Stm
 ifStmt =
@@ -121,7 +129,12 @@ initial =
        Just i  -> return (IntInit i)
 
 typ :: Parser Type
-typ = pure TReg <*> nat
+typ = 
+  do n <- nat
+     m <- optionMaybe (reservedOp "->" *> nat)
+     case m of
+       Nothing -> return (TReg n)
+       Just dw -> return (TArray RW n dw)
 
 nat :: Parser Int
 nat = pure fromIntegral <*> natural

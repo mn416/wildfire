@@ -6,8 +6,7 @@ var list  : 55 = 0x40000000000000
 var diffs : 55 = 0
 var marks : 5  = 1
 
-while 1 do
-  if marks == 10 then halt end ;
+while marks /= 10 do
   if (list & 1) == 1 then fail end ;
 
   list := list >> 1 ;

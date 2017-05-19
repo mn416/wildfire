@@ -1,6 +1,7 @@
 import WhileSyntax
 import WhileParser
 import WhileCompile
+import WhileSem
 import PagePretty
 import PageCompile
 import Netlist
@@ -18,4 +19,7 @@ main =
          putStrLn "Written Solver.page"
          writeVerilog "Solver" (PageCompile.compile prog')
          putStrLn "Written Solver.v"
-       other -> putStrLn "Usage: wildfire [PROG].w"
+       ["-i", sourceFile] -> do
+         prog <- parseProgFile sourceFile
+         run prog
+       other -> putStrLn "Usage: wildfire [-i] SOURCEFILE"

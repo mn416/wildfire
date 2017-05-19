@@ -17,4 +17,4 @@ while poss /= 0 do
      ; poss := ~(l|r|d) )
   ?  ( poss := poss & ~bit )
 end ;
-if d == ~0 then halt else fail end
+if d /= ~0 then fail end

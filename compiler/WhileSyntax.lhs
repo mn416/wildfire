@@ -30,25 +30,31 @@ A declaration associates an identifier with a type.
 > type Id = String
 
 > data Type =
->     TReg Width             {- Register with width -}
+>     TReg Width                {- Register with width -}
+>   | TArray ArrayMode Int Int  {- Array with address and data widths -}
 >     deriving (Eq, Show)
 
 > type Width = Int
+
+> data ArrayMode = RO | RW      {- Read-Only and Read/Write arrays -}
+>   deriving (Eq, Show)
 
 > type CompilerOpts = Map.Map String Integer
 
 Statements.
 
 > data Stm = 
->     Skip                      {- No-op -}
->   | Stm :> Stm                {- Sequential composition -}
->   | Id := Exp                 {- Register Assignment -}
->   | Stm :|| Stm               {- Fork-join parallelism -}
->   | Ifte Exp Stm Stm          {- If-then-else -}
->   | While Exp Stm             {- While loop -}
->   | Choice Stm Stm [Id]       {- Non-deterministic choice -}
->   | Fail                      {- Failure -}
->   | Halt                      {- Halt execution -}
+>     Skip                             {- No-op -}
+>   | Stm :> Stm                       {- Sequential composition -}
+>   | Id := Exp                        {- Register Assignment -}
+>   | Stm :|| Stm                      {- Fork-join parallelism -}
+>   | Ifte Exp Stm Stm                 {- If-then-else -}
+>   | While Exp Stm                    {- While loop -}
+>   | Choice Stm Stm [Id]              {- Non-deterministic choice -}
+>   | Fail                             {- Failure -}
+>   | Halt                             {- Halt execution -}
+>   | ArrayAssign Id Exp Exp           {- Array assignment -}
+>   | ArrayLookup ArrayMode Id Id Exp  {- Array lookup -}
 >     deriving Show
 
 The list of identifiers in the choice operator are the live variables
@@ -85,13 +91,17 @@ Traversals
 > onExp :: (Exp -> Exp) -> Stm -> Stm
 > onExp f s = descend (onExp f) $
 >   case s of 
->     x := e        -> x := f e
->     Ifte e s1 s2  -> Ifte (f e) s1 s2
->     While e s     -> While (f e) s
->     other         -> other
+>     x := e              -> x := f e
+>     Ifte e s1 s2        -> Ifte (f e) s1 s2
+>     While e s           -> While (f e) s
+>     ArrayAssign a e1 e2 -> ArrayAssign a (f e1) (f e2)
+>     ArrayLookup m x a e -> ArrayLookup m x a (f e)
+>     other               -> other
 
 > exprs :: Stm -> [Exp]
 > exprs (x := e) = [e]
 > exprs (Ifte e s1 s2) = [e] ++ exprs s1 ++ exprs s2
 > exprs (While e s) = [e] ++ exprs s
+> exprs (ArrayAssign a e1 e2) = [e1, e2]
+> exprs (ArrayLookup m x a e) = [e]
 > exprs other = extract exprs other

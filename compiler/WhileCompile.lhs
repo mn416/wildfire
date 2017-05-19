@@ -1,5 +1,6 @@
 > module WhileCompile (
->   compile -- :: Prog -> P.Prog ()
+>   compile    -- :: Prog -> P.Prog
+> , typeCheck  -- :: Prog -> Prog
 > ) where
 
 > import Netlist
@@ -12,6 +13,7 @@
 > import Data.Map as Map
 > import Data.List as List
 > import qualified Data.Map as Map
+> import qualified Data.Set as Set
 
 Type Checking
 =============
@@ -65,6 +67,17 @@ well-typed.  This function is not efficient.
 >     tc (Ifte e s1 s2) = Ifte (tcExp 1 e) (tc s1) (tc s2)
 >     tc (While e s) = While (tcExp 1 e) (tc s)
 >     tc (Choice s1 s2 live) = Choice (tc s1) (tc s2) live
+>     tc (ArrayAssign a e1 e2) =
+>       case env!a of
+>         TArray _ aw dw -> ArrayAssign a (tcExp aw e1) (tcExp dw e2)
+>         other -> typeError ("Not an array: " ++ show a)
+>     tc (ArrayLookup m x a e) =
+>       case (env!x, env!a) of
+>         (TReg w, TArray _ aw dw) ->
+>           if w == dw then ArrayLookup m x a (tcExp aw e) else
+>             typeError ("Width mismatch in lookup of array " ++ a)
+>         other -> typeError ("Expected " ++ a ++ " to be an array" ++
+>                             " and " ++ x ++ "to be a register")
 >     tc Fail = Fail
 >     tc Halt = Halt
 >     tc other = typeError (show other)
@@ -72,37 +85,70 @@ well-typed.  This function is not efficient.
 >     -- Type checker for declarations
 >     tcDecl d =
 >       case d of
+>         Decl v _ P.Uninit -> d
 >         Decl v (TReg n) (P.IntInit i) -> d
->         Decl v _ (P.IntInit i) -> typeError ("bad type for variable " ++ v)
+>         Decl v (TArray RO _ _) (P.StrInit s) -> d
+>         Decl v _ _ -> typeError ("Invalid initialiser for variable " ++ v)
 >         other -> other
+
+Array analysis
+==============
+
+Annotate each array declaration and lookup with the RO or RW flag
+depending on whether the array is Read-Only or Read/Write.
+
+> arrayAnalysis :: Prog -> Prog
+> arrayAnalysis p =
+>     p { decls = List.map trDecl (decls p)
+>       , code  = trStm (code p) }
+>   where
+>     rwArrays (ArrayAssign a e1 e2) = [a]
+>     rwArrays s = extract rwArrays s
+>
+>     rw = Set.fromList $ rwArrays (code p)
+>
+>     trDecl (Decl v (TArray _ aw dw) init)
+>       | v `Set.member` rw = Decl v (TArray RW aw dw) init
+>       | otherwise         = Decl v (TArray RO aw dw) init
+>     trDecl d = d
+>
+>     trStm (ArrayLookup _ x a e)
+>       | a `Set.member` rw = ArrayLookup RW x a e
+>       | otherwise         = ArrayLookup RO x a e
+>     trStm s = descend trStm s
 
 Static restrictions
 ===================
 
-(1) The choice operator must not occur within a fork-join parallel
-block because bactracking to a label within a parallel block will lead
-to indefinite blocking (the other branches are not active so
-synchronisation will never occur).
+(1) The '?', 'halt', and 'fail' operators must not occur within a
+parallel composition: I'm not aware of a sensible semantics for that.
 
 (2) In a statement p || q, if p modifies a variable v then then q must
 not refer to v, and vice-versa.  Otherwise parallel threads could
 interact in unforeseen ways.  With this restriction, p || q is
 semantically equivalent to both p ; q and q ; p.
 
-Both these restrictions involve the || operator and suggest that use
-of this operator should be inferred by the compiler rather than
-specified by the programmer.  (Future work.)
+(3) In a statement p || q, if p accesses an array then q must not
+access that same array, and vice-versa.
+
+The restrictions involving the || operator suggest that use of this
+operator should be inferred by the compiler rather than specified by
+the programmer.  (Future work.)
 
 > staticRestrictions :: Prog -> Prog
-> staticRestrictions p = p { code = check1 (check2 (code p)) }
+> staticRestrictions p =
+>     p { code = check1 $ check2 $ check3 $ code p }
 >   where
 >     check1 (p :|| q)
 >       | noChoices p && noChoices q = check1 p :|| check1 q
->       | otherwise = error "? operator forbidden inside ||"
+>       | otherwise =
+>           error "'?' and 'halt' and 'fail' operators forbidden inside '||'"
 >     check1 other = descend check1 other
 >
 >     noChoices s = List.null (choices s)
 >     choices (Choice p q _) = [()]
+>     choices Fail = [()]
+>     choices Halt = [()]
 >     choices other = extract choices other
 >
 >     check2 (p :|| q)
@@ -112,7 +158,24 @@ specified by the programmer.  (Future work.)
 >       | otherwise = error "parallel branches must be independent"
 >     check2 other = descend check2 other
 >
+>     check2 (p :|| q)
+>       | not (any (`elem` useStm q) (def p))
+>      && not (any (`elem` useStm p) (def q))
+>       = check2 p :|| check2 q
+>       | otherwise = error "parallel branches must be independent"
+>     check2 other = descend check2 other
+>
 >     useStm s = nub (concatMap use (exprs s))
+>
+>     check3 (p :|| q)
+>       | List.null (arrayVarsIn p `List.intersect` arrayVarsIn q) =
+>           check3 p :|| check3 q
+>       | otherwise = error "parallel branches must be independent"
+>     check3 other = descend check3 other
+>
+>     arrayVarsIn (ArrayAssign a _ _) = [a]
+>     arrayVarsIn (ArrayLookup _ _ a _) = [a]
+>     arrayVarsIn p = extract arrayVarsIn p
 
 Backtracking choice
 ===================
@@ -194,7 +257,7 @@ Live variables
 
 Return the variables live-in to any given statement.  The rule for the
 || operator looks suspicous but remember the parallel branches are
-independent, as required by static restriction (2), and are therefore
+independent, as required by the static restrictions, and are therefore
 semantically equivalent to sequential execution in any order.
 
 > live :: Stm -> [Id] -> [Id]
@@ -204,6 +267,8 @@ semantically equivalent to sequential execution in any order.
 > live (s1 :> s2) vs = live s1 (live s2 vs)
 > live (s1 :|| s2) vs = live s1 (live s2 vs)
 > live (Choice s1 s2 _) vs = live s1 vs `List.union` live s2 vs
+> live (ArrayLookup m x a e) vs = nub (use e) `List.union` (vs List.\\ [x])
+> live (ArrayAssign a e1 e2) vs = nub (use e1 ++ use e2) `List.union` vs
 > live other vs = vs
 
 > use :: Exp -> [Id]
@@ -212,6 +277,7 @@ semantically equivalent to sequential execution in any order.
 
 > def :: Stm -> [Id]
 > def (x := e) = [x]
+> def (ArrayLookup m x _ _) = [x]
 > def other = extract def other
 
 Here we annotate each choice point with the variables live-in to the
@@ -245,13 +311,19 @@ barring different instances of variable names.)
 
 > trProg :: Int -> [Int] -> Prog -> P.Prog
 > trProg i neighbours p =
->   P.Prog { P.opts  = Map.empty
+>   P.Prog { P.opts  = Map.fromList newOpts
 >          , P.decls = trDecls (decls p)
 >          , P.code  = snd $ runFresh (trCode (code p)) "_v" 0 }
 >   where
+>     newOpts :: [(String, Integer)]
+>     newOpts =
+>       [ ("RomPortsPerBlockRamPort",
+>             Map.findWithDefault 4 "ProcessorsPerROM" (opts p) `div` 2)
+>       ]
+>
 >     trCode :: Stm -> Fresh P.Stm
 >     trCode s =
->       do s' <- trStm s
+>       do s' <- trStm (s :> Halt)
 >          return $ P.block $ 
 >               [ s' ]
 >
@@ -329,6 +401,12 @@ barring different instances of variable names.)
 >                        P.Skip,
 >                 ("_emit" # i) P.:= P.Lit (Just 1) 1,
 >                 P.Tick, P.Jump ("_backtrack"  # i) ]
+>     trStm (ArrayLookup RO x a e) =
+>       return $ P.LoadRom (x # i) a (show i) (trExp e) P.:> P.Tick
+>     trStm (ArrayLookup RW x a e) =
+>       error "R/W arrays not yet supported"
+>     trStm (ArrayAssign a e1 e2) =
+>       error "R/W arrays not yet supported"
 >
 >     trDecls :: [Decl] -> [P.Decl]
 >     trDecls ds =
@@ -540,4 +618,5 @@ Top-level compiler
 >           translate (torus 23 23)
 >         . annotateLive
 >         . typeCheck
+>         . arrayAnalysis
 >         . staticRestrictions

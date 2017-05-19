@@ -548,7 +548,6 @@ Compile a statement to give a schedule.
 >          Inv   -> inv x1
 >          Shl n -> shl n x1
 >          Shr n -> shr n x1
->          First -> first x1
 >   compExp (Apply2 f e1 e2) =
 >     do x1 <- compExp e1
 >        x2 <- compExp e2
