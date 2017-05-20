@@ -1,16 +1,23 @@
--- Search for 6 mark ruler of max length 17
-var list  : 18 = 1
-var dist  : 18 = 0
-var marks : 5  = 1
+-- Search for ruler with NumMarks and MaxLength
+const NumMarks  = 6
+const MaxLength = 17
 
-while marks /= 6 do
-  if msb(list) == 1 then fail end ;
-  if (list & dist) == 0 then
-      (list := list << 1)
+-- Num bits needed to represent ruler
+const N = MaxLength + 1
+
+-- "Shift algorithm" due to Rankin & McCracken
+var ruler : N = 1  -- Positions of marks on ruler
+var dist  : N = 0  -- Distances measured by ruler
+var marks : 5 = 1  -- Number of marks made so far
+
+while marks /= NumMarks do
+  if msb(ruler) == 1 then fail end ;
+  if (ruler & dist) == 0 then
+      (ruler := ruler << 1)
     ? (marks := marks + 1 ||
-       dist := dist | list ;
-       list := (list << 1) | 1)
+       dist  := dist | ruler ;
+       ruler := (ruler << 1) | 1)
   else
-    list := list << 1
+    ruler := ruler << 1
   end
 end

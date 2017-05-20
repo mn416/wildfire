@@ -10,6 +10,7 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as T
 import qualified Data.Map as Map
+import Data.Bits
   
 page = T.makeTokenParser $ emptyDef
   { commentLine      = "--"
@@ -20,7 +21,7 @@ page = T.makeTokenParser $ emptyDef
   , opLetter         = oneOf "+-*/=<>;:|@.^~?"
   , reservedNames    = ["skip", "if", "then", "else", "end",
                         "while", "declare", "in", "fail",
-                        "opt", "var", "msb"]
+                        "opt", "var", "const", "msb"]
   , caseSensitive    = True
   }
   
@@ -39,6 +40,70 @@ charLiteral = T.charLiteral page
 stringLiteral = T.stringLiteral page
 lexeme = T.lexeme page
 whitespace = T.whiteSpace page
+
+-- Parse a "const" expression
+-- (These expressions are evaluated by the parser)
+
+type ConstMap = Map.Map String Integer
+
+constEval :: ConstMap -> Exp -> Integer
+constEval env e =
+  case e of
+    Lit w i     -> i
+    Var v       -> env!v
+    Apply1 op e -> 
+      let i = constEval env e in
+        case op of
+          Inv   -> complement i
+          Shl n -> i `shiftL` n
+          Shr n -> i `shiftR` n
+          _     -> error "Invalid 'const' expression"
+    Apply2 op e1 e2 ->
+      let i = constEval env e1
+          j = constEval env e2 in
+        case op of
+          And -> i .&. j
+          Or  -> i .|. j
+          Xor -> i `xor` j
+          Add -> i + j
+          Sub -> i - j
+          Mul -> i * j
+          Div -> i `div` j
+          Eq  -> if i == j then 1 else 0
+          Neq -> if i /= j then 1 else 0
+          Lt  -> if i <  j then 1 else 0
+          Lte -> if i <= j then 1 else 0
+          Gt  -> if i >  j then 1 else 0
+          Gte -> if i >= j then 1 else 0
+          _   -> error "Invalid 'const' expression"
+  where
+    m ! k = Map.findWithDefault (err k) k env
+    err k = error ("In 'const' expression, unbound variable: " ++ show k)
+
+constExpr :: ConstMap -> Parser ConstMap
+constExpr env = do
+  reserved "const"
+  id <- identifier
+  reserved "="
+  e <- expr env
+  return (Map.insert id (constEval env e) env)
+
+constExprs :: ConstMap -> Parser ConstMap
+constExprs env = do
+  m <- optionMaybe (constExpr env)
+  case m of
+    Nothing   -> return env
+    Just env' -> constExprs env'
+
+number :: ConstMap -> Parser Integer
+number env = natural <|> do
+  x <- identifier
+  case Map.lookup x env of
+    Just i -> return i
+    _      -> error ("Unbound variable in 'const' expression: " ++ x)
+
+num :: ConstMap -> Parser Int
+num env = pure fromInteger <*> number env
 
 -- Expressions
 
@@ -67,14 +132,20 @@ shiftl e other = error "Right-hand-side of << operator must be a literal"
 shiftr e (Lit w n) = Apply1 (Shr $ fromInteger n) e
 shiftr e other = error "Right-hand-side of >> operator must be a literal"
 
-expr :: Parser Exp
-expr = buildExpressionParser opTable expr'
+expr :: ConstMap -> Parser Exp
+expr env = buildExpressionParser opTable (expr' env)
 
-expr' :: Parser Exp
-expr' = pure (Lit Nothing) <*> natural
-    <|> pure Var <*> identifier
-    <|> pure (Apply1 MSB) <*> (reserved "msb" *> parens (expr))
-    <|> parens expr
+expr' :: ConstMap -> Parser Exp
+expr' env =
+        pure (Lit Nothing) <*> natural
+    <|> do {
+          v <- identifier ;
+          case Map.lookup v env of
+            Just i  -> return (Lit Nothing i)
+            Nothing -> return (Var v)
+        }
+    <|> pure (Apply1 MSB) <*> (reserved "msb" *> parens (expr env))
+    <|> parens (expr env)
 
 -- Statements
 
@@ -86,93 +157,93 @@ stmtOpTable =
   , [ stmBinOp ";" (:>) AssocLeft ]
   ]
 
-stmt :: Parser Stm
-stmt = buildExpressionParser stmtOpTable stmt'
+stmt :: ConstMap -> Parser Stm
+stmt env = buildExpressionParser stmtOpTable (stmt' env)
 
-stmt' :: Parser Stm
-stmt'  = pure Skip <* reserved "skip"
-     <|> ifStmt
-     <|> pure While <*> (reserved "while" *> expr <* reserved "do") <*>
-           (stmt <* reserved "end")
+stmt' :: ConstMap -> Parser Stm
+stmt' env =
+         pure Skip <* reserved "skip"
+     <|> ifStmt env
+     <|> pure While <*> (reserved "while" *> expr env <* reserved "do") <*>
+           (stmt env <* reserved "end")
      <|> pure Fail <* reserved "fail"
 --   <|> pure Halt <* reserved "halt"
-     <|> parens stmt
+     <|> parens (stmt env)
      <|> do x <- identifier
-            m <- optionMaybe (brackets expr)
+            m <- optionMaybe (brackets (expr env))
             reservedOp ":="
             case m of
               Nothing -> try (pure (ArrayLookup RW x) <*>
-                           identifier <*> brackets expr)
-                     <|> pure (x :=) <*> expr
-              Just e  -> do rhs <- expr
+                           identifier <*> brackets (expr env))
+                     <|> pure (x :=) <*> expr env
+              Just e  -> do rhs <- expr env
                             return (ArrayAssign x e rhs)
 
-ifStmt :: Parser Stm
-ifStmt =
-  do e  <- reserved "if" *> expr
-     s1 <- reserved "then" *> stmt
-     s2 <- (reserved "else" *> stmt <* reserved "end")
+ifStmt :: ConstMap -> Parser Stm
+ifStmt env =
+  do e  <- reserved "if" *> expr env
+     s1 <- reserved "then" *> stmt env
+     s2 <- (reserved "else" *> stmt env <* reserved "end")
        <|> (reserved "end" *> return Skip)
      return (Ifte e s1 s2)
 
 -- Declarations
 
-decl :: Parser Decl
-decl = pure Decl <*> (reserved "var" *> identifier <* reserved ":")
-                 <*> typ
-                 <*> initial
+decl :: ConstMap -> Parser Decl
+decl env =
+   pure Decl <*> (reserved "var" *> identifier <* reserved ":")
+             <*> typ env
+             <*> initial env
 
-initial :: Parser Init
-initial =
-  do m <- optionMaybe (reserved "=" *> natural)
+initial :: ConstMap -> Parser Init
+initial env =
+  do m <- optionMaybe (reserved "=" *> number env)
      case m of
        Nothing -> return Uninit
        Just i  -> return (IntInit i)
 
-typ :: Parser Type
-typ = 
-  do n <- nat
-     m <- optionMaybe (reservedOp "->" *> nat)
+typ :: ConstMap -> Parser Type
+typ env = 
+  do n <- num env
+     m <- optionMaybe (reservedOp "->" *> num env)
      case m of
        Nothing -> return (TReg n)
        Just dw -> return (TArray RW n dw)
-
-nat :: Parser Int
-nat = pure fromIntegral <*> natural
 
 log2 :: Integral a => a -> a
 log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
  
 -- Parse a compiler option
 
-compilerOpt :: Parser CompilerOpts
-compilerOpt =
+compilerOpt :: ConstMap -> Parser CompilerOpts
+compilerOpt env =
   do reserved "opt"
      key <- identifier
      reserved "="
-     val <- natural
+     val <- number env
      return (Map.fromList [(key, val)])
 
 -- Parse program prelude
 
-prelude :: Parser (CompilerOpts, [Decl])
+prelude :: Parser (ConstMap, CompilerOpts, [Decl])
 prelude =
-  do items <- many preludeItem
+  do env <- constExprs Map.empty
+     items <- many (preludeItem env)
      let (opts, decls) = unzip items
-     return (Map.unions opts, concat decls)
+     return (env, Map.unions opts, concat decls)
 
-preludeItem :: Parser (CompilerOpts, [Decl])
-preludeItem =
-      do { o <- compilerOpt ; return (o, []) }
-  <|> do { d <- decl ; return (Map.empty, [d]) }
+preludeItem :: ConstMap -> Parser (CompilerOpts, [Decl])
+preludeItem env =
+      do { o <- compilerOpt env ; return (o, []) }
+  <|> do { d <- decl env ; return (Map.empty, [d]) }
 
 -- Programs
 
 prog :: Parser Prog
 prog =
   do whitespace
-     (opts, ds) <- prelude
-     s <- stmt
+     (env, opts, ds) <- prelude
+     s <- stmt env
      return (Prog opts ds s)
  
 parseProgFile :: SourceName -> IO Prog

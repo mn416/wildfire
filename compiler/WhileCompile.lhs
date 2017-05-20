@@ -48,6 +48,10 @@ well-typed.  This function is not efficient.
 >         ch (Lit Nothing n) = Lit (Just w) n
 >         ch (Lit (Just w') n) | w == w' = Lit (Just w) n
 >         ch (Var v) | env!v == TReg w = e
+>         ch (Apply1 P.MSB e) =
+>           case widthOf e of
+>             Nothing -> typeError ("Can't determine width: " ++ (show e))
+>             Just w  -> Apply1 P.MSB (tcExp w e)
 >         ch (Apply1 op e) = Apply1 op (tcExp w e)
 >         ch (Apply2 op e1 e2)
 >           | P.isCmpOp op =

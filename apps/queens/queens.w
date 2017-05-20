@@ -1,12 +1,15 @@
+-- Solve the N-queens problem
+const N = 18
+
 -- Compiler options
-opt StackWidth = 18
+opt StackWidth = N
 
 -- Set the widths to N to solve N-Queens
-var poss : 18  -- Possible positions of queen on current row
-var l    : 18  -- Squares attacked on current row due to left-diagonal
-var r    : 18  -- " due to right-diagonal
-var d    : 18  -- " due to column
-var bit  : 18  -- Choice of queen position on current row
+var poss : N  -- Possible positions of queen on current row
+var l    : N  -- Squares attacked on current row due to left-diagonal
+var r    : N  -- " due to right-diagonal
+var d    : N  -- " due to column
+var bit  : N  -- Choice of queen position on current row
 
 poss := ~0 ;
 while poss /= 0 do
