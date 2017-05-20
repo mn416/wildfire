@@ -68,6 +68,7 @@ Expressions
 >     P.Inv   -> lift1 complement n
 >     P.Shl i -> lift1 (`shiftL` i) n
 >     P.Shr i -> lift1 (`shiftR` i) n
+>     P.MSB   -> bitStr (val n `shiftR` (width n - 1)) 1
 >   where
 >     n = eval env e
 > eval env (Apply2 op e1 e2) =
@@ -143,5 +144,9 @@ Programs
 >   let p' = typeCheck p
 >   env <- initState Map.empty (decls p')
 >   let results = exec env (code p')
->   putStr "#Solutions = "
->   print (length results)
+>   case results of
+>     [] -> putStrLn "No solutions"
+>     r:rs -> do
+>       putStrLn "Solution exists"
+>       putStr "Num solutions = "
+>       print (length results)

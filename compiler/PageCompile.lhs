@@ -548,6 +548,7 @@ Compile a statement to give a schedule.
 >          Inv   -> inv x1
 >          Shl n -> shl n x1
 >          Shr n -> shr n x1
+>          MSB   -> let index = width x1 - 1 in select index index x1
 >   compExp (Apply2 f e1 e2) =
 >     do x1 <- compExp e1
 >        x2 <- compExp e2
@@ -774,6 +775,7 @@ well-typed.  This function is not efficient.
 >       case env!v of
 >         TReg w -> Just w
 >         other  -> Nothing
+>     widthOf (Apply1 MSB e) = Just 1
 >     widthOf (Apply1 op e) = widthOf e
 >     widthOf (Apply2 op e1 e2) = widthOf e1 `mplus` widthOf e2
 >     widthOf (RamOutput m p) = dataWidth (env!m)

@@ -20,7 +20,7 @@ page = T.makeTokenParser $ emptyDef
   , opLetter         = oneOf "+-*/=<>;:|@.^~?"
   , reservedNames    = ["skip", "if", "then", "else", "end",
                         "while", "declare", "in", "fail",
-                        "opt", "var"]
+                        "opt", "var", "msb"]
   , caseSensitive    = True
   }
   
@@ -73,6 +73,7 @@ expr = buildExpressionParser opTable expr'
 expr' :: Parser Exp
 expr' = pure (Lit Nothing) <*> natural
     <|> pure Var <*> identifier
+    <|> pure (Apply1 MSB) <*> (reserved "msb" *> parens (expr))
     <|> parens expr
 
 -- Statements

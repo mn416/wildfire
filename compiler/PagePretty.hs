@@ -83,6 +83,7 @@ prettyExp (Lit (Just w) i) = text (show i) <> text ":" <> text (show w)
 prettyExp (Var v) = text v
 prettyExp (Lab l) = text l
 prettyExp (Ptr p) = text "^" <> text p
+prettyExp (Apply1 MSB e1) = text "msb" <> parens (prettyExp e1)
 prettyExp (Apply1 (Shl n) e1) =
   parens (prettyExp e1 <+> text "<<" <+> text (show n))
 prettyExp (Apply1 (Shr n) e1) =
