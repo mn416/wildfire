@@ -37,6 +37,7 @@ well-typed.  This function is not efficient.
 >       case env!v of
 >         TReg w -> Just w
 >         other  -> Nothing
+>     widthOf (Apply1 P.MSB e) = Just 1
 >     widthOf (Apply1 op e) = widthOf e
 >     widthOf (Apply2 op e1 e2) = widthOf e1 `mplus` widthOf e2
 >
