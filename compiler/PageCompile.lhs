@@ -791,6 +791,10 @@ well-typed.  This function is not efficient.
 >         ch (Lit Nothing n) = Lit (Just w) n
 >         ch (Lit (Just w') n) | w == w' = Lit (Just w) n
 >         ch (Var v) | env!v == TReg w = e
+>         ch (Apply1 MSB e) =
+>           case widthOf e of
+>             Just w  -> Apply1 MSB (tcExp w e)
+>             Nothing -> error ("Can't determine width: " ++ show e)
 >         ch (Apply1 op e) = Apply1 op (tcExp w e)
 >         ch (Apply2 op e1 e2)
 >           | isCmpOp op =

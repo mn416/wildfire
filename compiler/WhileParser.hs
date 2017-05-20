@@ -21,7 +21,7 @@ page = T.makeTokenParser $ emptyDef
   , opLetter         = oneOf "+-*/=<>;:|@.^~?"
   , reservedNames    = ["skip", "if", "then", "else", "end",
                         "while", "declare", "in", "fail",
-                        "opt", "var", "const", "msb"]
+                        "opt", "var", "const", "msb", "bit"]
   , caseSensitive    = True
   }
   
@@ -202,10 +202,18 @@ initial env =
        Nothing -> return Uninit
        Just i  -> return (IntInit i)
 
+bitType :: ConstMap -> Parser Int
+bitType env = do
+  reserved "bit"
+  reservedOp "<"
+  n <- num env
+  reservedOp ">"
+  return n
+
 typ :: ConstMap -> Parser Type
 typ env = 
-  do n <- num env
-     m <- optionMaybe (reservedOp "->" *> num env)
+  do n <- bitType env
+     m <- optionMaybe (reservedOp "->" *> bitType env)
      case m of
        Nothing -> return (TReg n)
        Just dw -> return (TArray RW n dw)

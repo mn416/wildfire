@@ -4,23 +4,23 @@ const N = 18
 -- Compiler options
 opt StackWidth = N
 
--- Set the widths to N to solve N-Queens
-var poss : N  -- Possible positions of queen on current row
-var l    : N  -- Squares attacked on current row due to left-diagonal
-var r    : N  -- " due to right-diagonal
-var d    : N  -- " due to column
-var bit  : N  -- Choice of queen position on current row
+-- Program state
+var poss : bit<N>  -- Possible positions of queen on current row
+var l    : bit<N>  -- Squares attacked on current row due to left-diagonal
+var r    : bit<N>  -- " due to right-diagonal
+var d    : bit<N>  -- " due to column
+var hot  : bit<N>  -- Choice of queen position on current row
 
 poss := ~0 ;
 while poss /= 0 do
   -- Isolate first hot bit in poss
-  bit := poss & (~poss + 1) ;
+  hot := poss & (~poss + 1) ;
   -- Either place a queen here or not
-     ( l := (l|bit) << 1
-    || r := (r|bit) >> 1
-    || d := d|bit
+     ( l := (l|hot) << 1
+    || r := (r|hot) >> 1
+    || d := d|hot
      ; poss := ~(l|r|d) )
-  ?  ( poss := poss & ~bit )
+  ?  ( poss := poss & ~hot )
 end ;
 -- Fail unless every column has a queen
 if d /= ~0 then fail end

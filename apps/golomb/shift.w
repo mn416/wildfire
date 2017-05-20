@@ -6,9 +6,9 @@ const MaxLength = 17
 const N = MaxLength + 1
 
 -- "Shift algorithm" due to Rankin & McCracken
-var ruler : N = 1  -- Positions of marks on ruler
-var dist  : N = 0  -- Distances measured by ruler
-var marks : 5 = 1  -- Number of marks made so far
+var ruler : bit<N> = 1  -- Positions of marks on ruler
+var dist  : bit<N> = 0  -- Distances measured by ruler
+var marks : bit<5> = 1  -- Number of marks made so far
 
 while marks /= NumMarks do
   if msb(ruler) == 1 then fail end ;
