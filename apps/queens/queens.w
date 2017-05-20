@@ -1,4 +1,7 @@
--- Solve the N-queens problem
+-- N-Queens solver
+-- Algorithm due to Martin Richards
+
+-- Number of queens
 const N = 18
 
 -- Compiler options
