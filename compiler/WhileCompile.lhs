@@ -1,6 +1,7 @@
 > module WhileCompile (
->   compile    -- :: Prog -> P.Prog
-> , typeCheck  -- :: Prog -> Prog
+>   compile       -- :: Prog -> P.Prog
+> , typeCheck     -- :: Prog -> Prog
+> , arrayAnalysis -- :: Prog -> Prog
 > ) where
 
 > import Netlist
@@ -517,6 +518,8 @@ of nodes.)
 >       ++ [ P.Decl ("_emit_bus" # i) (P.TReg 1) P.Uninit | i <- [0..n] ]
 >       ++ [ P.Decl ("_done" # i) (P.TReg 1) P.Uninit | i <- [0..n] ]
 >       ++ concatMap P.decls ps
+>       ++ [ P.Decl v (P.TRom aw dw) init
+>          | Decl v (TArray RO aw dw) init <- decls p]
 
 > (#) :: String -> Int -> String
 > v # i = v ++ "[" ++ show i ++ "]"
@@ -614,13 +617,13 @@ Top-level compiler
 >           -- translate (torus 10 10)
 >           -- translate (torus 25 25)
 >           -- translate (butterfly 6)
->           -- translate (wavefly 6 8)
+>           translate (wavefly 5 6)
 >           -- translate (butterfly 4)
 >           -- translate (torus 12 12)
 >           -- translate (torus 8 8)
 >           -- translate (wavefly 6 8)
 >           -- translate (wavefly 5 16)
->           translate (torus 23 23)
+>           -- translate (torus 23 23)
 >         . annotateLive
 >         . typeCheck
 >         . arrayAnalysis

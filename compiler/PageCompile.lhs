@@ -549,6 +549,7 @@ Compile a statement to give a schedule.
 >          Shl n -> shl n x1
 >          Shr n -> shr n x1
 >          MSB   -> let index = width x1 - 1 in select index index x1
+>          Log   -> error "log function not synthesisable"
 >   compExp (Apply2 f e1 e2) =
 >     do x1 <- compExp e1
 >        x2 <- compExp e2

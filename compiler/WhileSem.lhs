@@ -141,7 +141,7 @@ Programs
 
 > run :: Prog -> IO ()
 > run p = do
->   let p' = typeCheck p
+>   let p' = typeCheck $ arrayAnalysis p
 >   env <- initState Map.empty (decls p')
 >   let results = exec env (code p')
 >   case results of

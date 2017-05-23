@@ -1,7 +1,0 @@
--- TODO:
---   * introduce 'remLen' variable, for remaining length
---   * fail when remLen becomes 0
---   * change marks to remMarks
---   * succeed when remMarks becomes 0
---   * add min array, such that min[n] gives optimal length for n marks
---   * fail if remLen < min[remMarks]

@@ -1,5 +1,5 @@
 -- N-Queens solver
--- Algorithm due to Martin Richards
+-- Algorithm due to M. Richards
 
 -- Number of queens
 const N = 18

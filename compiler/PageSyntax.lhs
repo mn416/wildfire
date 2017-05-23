@@ -108,6 +108,7 @@ Expressions (arithmetic & conditions).
 >     Inv                {- Negation -}
 >   | Shl Int | Shr Int  {- Constant left and right shifts -}
 >   | MSB                {- Most significant bit -}
+>   | Log                {- Log base 2, round up -}
 >     deriving Show
 
 > data BinOp =

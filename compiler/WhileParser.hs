@@ -21,7 +21,8 @@ page = T.makeTokenParser $ emptyDef
   , opLetter         = oneOf "+-*/=<>;:|@.^~?"
   , reservedNames    = ["skip", "if", "then", "else", "end",
                         "while", "declare", "in", "fail",
-                        "opt", "var", "const", "msb", "bit"]
+                        "opt", "var", "const", "msb", "bit",
+                        "log"]
   , caseSensitive    = True
   }
   
@@ -57,6 +58,7 @@ constEval env e =
           Inv   -> complement i
           Shl n -> i `shiftL` n
           Shr n -> i `shiftR` n
+          Log   -> log2 i + 1
           _     -> error "Invalid 'const' expression"
     Apply2 op e1 e2 ->
       let i = constEval env e1
@@ -77,8 +79,9 @@ constEval env e =
           Gte -> if i >= j then 1 else 0
           _   -> error "Invalid 'const' expression"
   where
-    m ! k = Map.findWithDefault (err k) k env
-    err k = error ("In 'const' expression, unbound variable: " ++ show k)
+    m ! k  = Map.findWithDefault (err k) k env
+    err k  = error ("In 'const' expression, unbound variable: " ++ show k)
+    log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
 
 constExpr :: ConstMap -> Parser ConstMap
 constExpr env = do
@@ -145,6 +148,7 @@ expr' env =
             Nothing -> return (Var v)
         }
     <|> pure (Apply1 MSB) <*> (reserved "msb" *> parens (expr env))
+    <|> pure (Apply1 Log) <*> (reserved "log" *> parens (expr env))
     <|> parens (expr env)
 
 -- Statements
@@ -197,10 +201,12 @@ decl env =
 
 initial :: ConstMap -> Parser Init
 initial env =
-  do m <- optionMaybe (reserved "=" *> number env)
+  do m <- optionMaybe (reserved "=")
      case m of
        Nothing -> return Uninit
-       Just i  -> return (IntInit i)
+       Just _  ->
+            pure IntInit <*> number env
+        <|> pure StrInit <*> stringLiteral
 
 bitType :: ConstMap -> Parser Int
 bitType env = do

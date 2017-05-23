@@ -1,12 +1,16 @@
 -- Golomb ruler solver
--- Uses the "shift algorithm" due to Rankin & McCracken
+-- Uses the "shift algorithm" due to W. Rankin & D. McCracken
 
 -- Search for ruler with NumMarks and MaxLength
-const NumMarks  = 6
-const MaxLength = 17
+const NumMarks  = 10
+const MaxLength = 55
 
 -- Num bits needed to represent ruler
 const N = MaxLength + 1
+
+-- Compiler options
+opt StackWidth = 40
+opt ProcessorsPerRom = 2
 
 -- Program state
 var ruler : bit<N> = 1  -- Positions of marks on ruler
