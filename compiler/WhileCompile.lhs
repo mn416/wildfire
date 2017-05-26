@@ -409,14 +409,17 @@ barring different instances of variable names.)
 >                 P.Tick, P.Jump ("_backtrack"  # i) ]
 >     trStm (ArrayLookup RO x a e) =
 >       return $ P.LoadRom (x # i) a (show i) (trExp e) P.:> P.Tick
->     trStm (ArrayLookup RW x a e) =
->       error "R/W arrays not yet supported"
+>     trStm (ArrayLookup RW x a e) = return $
+>       P.Fetch (a # i) P.A (trExp e) P.:> P.Tick P.:>
+>       ((x # i) P.:= P.RamOutput (a # i) P.A) P.:> P.Tick
 >     trStm (ArrayAssign a e1 e2) =
 >       error "R/W arrays not yet supported"
 >
 >     trDecls :: [Decl] -> [P.Decl]
 >     trDecls ds =
 >         [P.Decl (v # i) (P.TReg n) init | Decl v (TReg n) init <- ds]
+>      ++ [P.Decl (v # i) (P.TRam aw dw) init
+>         | Decl v (TArray RW aw dw) init <- ds]
 >      ++ [P.Decl ("_stack" # i) (P.TRam stackDepth stackWidth) P.Uninit]
 >      ++ [P.Decl ("_ret" # i) (P.TLab []) P.Uninit]
 >      ++ [P.Decl ("_emit" # i) (P.TReg 1) P.Uninit]

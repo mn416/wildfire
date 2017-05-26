@@ -400,6 +400,8 @@ Create a signal (of the correct width) for each identifier:
 >       ++ [(v, 1) | v <- labels p]
 >       ++ concat [ [(v ++ ":A", dw), (v ++ ":B", dw)]
 >                 | Decl v (TRam aw dw) _ <- decls p]
+>       ++ concat [ [(v ++ ":A", dwA), (v ++ ":B", dwB)]
+>                 | Decl v (TMWRam awA dwA awB dwB) _ <- decls p]
 >       ++ [(v, dw) | Decl v (TRom aw dw) _ <- decls p]
 
 An item of a schedule describes an action to be performed on an
@@ -619,20 +621,23 @@ loops may exists from a signal back to itself.)
 >       do trig <- orBits [go | (go, JumpToLabel v) <- s, v == l]
 >          (env!l) <== trig
 >
->     rams = [(v, aw, dw, init) | Decl v (TRam aw dw) init <- decls p]
->     ram (r, aw, dw, init) =
+>     rams = [ (v, aw, dw, aw, dw, init)
+>            | Decl v (TRam aw dw) init <- decls p ] ++
+>            [ (v, awA, dwA, awB, dwB, init)
+>            | Decl v (TMWRam awA dwA awB dwB) init <- decls p ]
+>     ram (r, awA, dwA, awB, dwB, init) =
 >       do readEnA  <- orBits [go | (go, _) <- readsA]
 >          writeEnA <- orBits [go | (go, _, _) <- writesA]
 >          enA      <- readEnA <|> writeEnA
->          dataInA  <- muxz dw [(go, x) | (go, i, x) <- writesA]
->          addrInA  <- muxz aw $ [(go, i) | (go, i) <- readsA]
->                             ++ [(go, i) | (go, i, x) <- writesA]
+>          dataInA  <- muxz dwA [(go, x) | (go, i, x) <- writesA]
+>          addrInA  <- muxz awA $ [(go, i) | (go, i) <- readsA]
+>                              ++ [(go, i) | (go, i, x) <- writesA]
 >          readEnB  <- orBits [go | (go, _) <- readsB]
 >          writeEnB <- orBits [go | (go, _, _) <- writesB]
 >          enB      <- readEnB <|> writeEnB
->          dataInB  <- muxz dw [(go, x) | (go, i, x) <- writesB]
->          addrInB  <- muxz aw $ [(go, i) | (go, i) <- readsB]
->                             ++ [(go, i) | (go, i, x) <- writesB]
+>          dataInB  <- muxz dwB [(go, x) | (go, i, x) <- writesB]
+>          addrInB  <- muxz awB $ [(go, i) | (go, i) <- readsB]
+>                              ++ [(go, i) | (go, i, x) <- writesB]
 >          (outA, outB) <- dualBlockRam (initFile init)
 >                              (RamInputs enA writeEnA dataInA addrInA,
 >                               RamInputs enB writeEnB dataInB addrInB)
@@ -779,12 +784,14 @@ well-typed.  This function is not efficient.
 >     widthOf (Apply1 MSB e) = Just 1
 >     widthOf (Apply1 op e) = widthOf e
 >     widthOf (Apply2 op e1 e2) = widthOf e1 `mplus` widthOf e2
->     widthOf (RamOutput m p) = dataWidth (env!m)
+>     widthOf (RamOutput m p) = dataWidth p (env!m)
 >     widthOf (Select from to e) = Just ((from+1) - to)
 >     widthOf (Concat e1 e2) = return (+) `ap` widthOf e1 `ap` widthOf e2
 >
->     dataWidth (TRam aw dw) = Just dw
->     dataWidth other = Nothing
+>     dataWidth _ (TRam aw dw) = Just dw
+>     dataWidth A (TMWRam awA dwA awB dwB) = Just dwA
+>     dataWidth B (TMWRam awA dwA awB dwB) = Just dwB
+>     dataWidth _ other = Nothing
 >
 >     tcExp :: Int -> Exp -> Exp
 >     tcExp w e = ch e
@@ -804,7 +811,7 @@ well-typed.  This function is not efficient.
 >                 Just w -> Apply2 op (tcExp w e1) (tcExp w e2)
 >           | not (isCmpOp op) = Apply2 op (tcExp w e1) (tcExp w e2)
 >         ch (RamOutput m p)
->           | dataWidth (env!m) == Just w = e
+>           | dataWidth p (env!m) == Just w = e
 >         ch (Select from to e)
 >           | w == ((from+1) - to) =
 >               case widthOf e of
@@ -864,11 +871,19 @@ well-typed.  This function is not efficient.
 >     tc (Fetch r p e) =
 >       case env!r of
 >         TRam aw dw -> Fetch r p (tcExp aw e)
+>         TMWRam awA dwA awB dwB ->
+>           case p of
+>             A -> Fetch r p (tcExp awA e)
+>             B -> Fetch r p (tcExp awB e)
 >         other -> typeError (show (Fetch r p e))
 >     tc (Store r p i e) =
 >       case env!r of
 >         TRam aw dw ->
->           Store r p (tcExp dw i) (tcExp aw e)
+>           Store r p (tcExp aw i) (tcExp dw e)
+>         TMWRam awA dwA awB dwB ->
+>           case p of
+>             A -> Store r p (tcExp awA i) (tcExp dwA e)
+>             B -> Store r p (tcExp awB i) (tcExp dwB e)
 >         other -> typeError (show (Store r p i e))
 >     tc (LoadRom x r p e) =
 >       case env!r of

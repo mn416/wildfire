@@ -35,8 +35,10 @@ A declaration associates an identifier with a type.
 >   | TPtr Width [Id]        {- Pointer -}
 >   | TLab [Id]              {- Label -}
 >   | TLock                  {- Lock -}
->   | TRam Width Width       {- Ram with address & data width -}
->   | TRom Width Width       {- Rom with address & data width -}
+>   | TRam Width Width       {- RAM with address & data width -}
+>   | TRom Width Width       {- ROM with address & data width -}
+>   | TMWRam Width Width     {- Mixed width RAM -}
+>            Width Width
 >     deriving (Eq, Show)
 
 > type Width = Int

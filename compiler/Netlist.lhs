@@ -67,7 +67,8 @@ An instance is a component with inputs and outputs.
 >   | Delay | DelayEn | SetReset         {- Registers -}
 >   | Select Int Int  | Concat           {- Bit selection & concatenation -}
 >   | BlockRam Int Int String String     {- Block RAM -}
->   | DualBlockRam Int Int String String {- Dual-port block RAM -}
+>   | DualBlockRam Int Int Int Int
+>                  String String         {- Dual-port block RAM -}
 >     deriving (Eq, Show)
 
 Interface (Lava Monad)
@@ -245,16 +246,14 @@ Block RAMs:
 Dual-port block RAMs:
 
 > dualBlockRam :: String -> (RamInputs, RamInputs) -> Lava (Sig, Sig)
-> dualBlockRam initFile (insA, insB)
->   | widA == widB && capA == capB =
+> dualBlockRam initFile (insA, insB) =
 >     do outA <- newSig widA
 >        outB <- newSig widB
 >        ramName <- newSigId
->        newInst (DualBlockRam widA capA ramName initFile,
+>        newInst (DualBlockRam widA capA widB capB ramName initFile,
 >          [ramEn insA, writeEn insA, dataBus insA, addrBus insA,
 >           ramEn insB, writeEn insB, dataBus insB, addrBus insB], [outA, outB])
 >        return (outA, outB)
->   | otherwise = error "dualBlockRam ports must be the same size"
 >   where
 >     widA = width (dataBus insA)
 >     widB = width (dataBus insB)
@@ -513,16 +512,17 @@ Pure structural component instances:
 >   "  .EN_B(0),\n" ++
 >   "  .DO_A(" ++ sigId o ++ "),\n" ++
 >   "  .DO_B());\n"
-> pureInst (DualBlockRam dw aw r initFile, [enA, weA, dA, aA,
->                                           enB, weB, dB, aB], [oA, oB]) =
+> pureInst (DualBlockRam dwA awA dwB awB r initFile,
+>             [enA, weA, dA, aA,
+>              enB, weB, dB, aB], [oA, oB]) =
 >   "AlteraBlockRamTrueMixed#(\n" ++
 >   "  .INIT_FILE(\"" ++ initFile ++ "\"),\n" ++
->   "  .ADDR_WIDTH_A(" ++ show aw ++ "),\n" ++
->   "  .ADDR_WIDTH_B(" ++ show aw ++ "),\n" ++
->   "  .DATA_WIDTH_A(" ++ show dw ++ "),\n" ++
->   "  .DATA_WIDTH_B(" ++ show dw ++ "),\n" ++
->   "  .NUM_ELEMS_A(" ++ show (2^aw) ++ "),\n" ++
->   "  .NUM_ELEMS_B(" ++ show (2^aw) ++ ")) " ++ r ++ " (\n" ++
+>   "  .ADDR_WIDTH_A(" ++ show awA ++ "),\n" ++
+>   "  .ADDR_WIDTH_B(" ++ show awB ++ "),\n" ++
+>   "  .DATA_WIDTH_A(" ++ show dwA ++ "),\n" ++
+>   "  .DATA_WIDTH_B(" ++ show dwB ++ "),\n" ++
+>   "  .NUM_ELEMS_A(" ++ show (2^awA) ++ "),\n" ++
+>   "  .NUM_ELEMS_B(" ++ show (2^awB) ++ ")) " ++ r ++ " (\n" ++
 >   "  .CLK(clock),\n" ++
 >   "  .DI_A(" ++ sigId dA ++ "),\n" ++
 >   "  .DI_B(" ++ sigId dB ++ "),\n" ++

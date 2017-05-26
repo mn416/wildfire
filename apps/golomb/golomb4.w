@@ -43,7 +43,7 @@ while marks /= NumMarks do
   if (marks == MidMark) & (len > MidPoint) then fail end ;
 
   i := 0 || ok := 1 ;
-  while i /= NumChunks do
+  while ok & (i /= NumChunks) do
        r := ruler[i]
     || d := dist[i]
      ; ok := ok & ((r&d) == 0)

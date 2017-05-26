@@ -24,8 +24,13 @@ prettyType (TReg w)     = text "reg" <+> text (show w)
 prettyType (TPtr w _)   = text "ptr" <> text (show w)
 prettyType (TLab labs)  = text "label" <+> text "=" <+> text (show labs)
 prettyType TLock        = text "lock"
-prettyType (TRam aw dw) = text "ram" <+> text (show aw) <+> text (show dw)
 prettyType (TRom aw dw) = text "rom" <+> text (show aw) <+> text (show dw)
+prettyType (TRam aw dw) = text "ram" <+> text (show aw) <+> text (show dw)
+prettyType (TMWRam aw1 dw1 aw2 dw2) =
+  text "ram" <+> text "<" <> text (show aw1) <> text "->"
+             <>  text (show dw1) <> text ">"
+             <+> text "<" <> text (show aw2) <> text "->"
+             <>  text (show dw2) <> text ">"
 
 prettyDecl :: Decl -> Doc
 prettyDecl (Decl v ty init) =

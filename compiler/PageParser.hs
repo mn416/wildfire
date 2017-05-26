@@ -164,8 +164,22 @@ typ = pure TReg <*> (reserved "reg" *> nat)
   <|> pure (`TPtr` []) <*> (reserved "ptr" *> nat)
   <|> pure (TLab []) <* reserved "label"
   <|> pure TLock <* reserved "lock"
-  <|> pure TRam <*> (reserved "ram" *> nat) <*> nat
   <|> pure TRom <*> (reserved "rom" *> nat) <*> nat
+  <|> do reserved "ram"
+         m <- optionMaybe (reservedOp "<")
+         case m of
+           Nothing -> pure TRam <*> nat <*> nat
+           Just _  -> do
+             aw1 <- nat
+             reservedOp "->"
+             dw1 <- nat
+             reservedOp ">"
+             reservedOp "<"
+             aw2 <- nat
+             reservedOp "->"
+             dw2 <- nat
+             reservedOp ">"
+             return (TMWRam aw1 dw1 aw2 dw2)
 
 nat :: Parser Int
 nat = pure fromIntegral <*> natural
