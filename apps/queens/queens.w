@@ -8,11 +8,11 @@ const N = 18
 opt StackWidth = N
 
 -- Program state
-var poss : bit<N>  -- Possible positions of queen on current row
-var l    : bit<N>  -- Squares attacked on current row due to left-diagonal
-var r    : bit<N>  -- " due to right-diagonal
-var d    : bit<N>  -- " due to column
-var hot  : bit<N>  -- Choice of queen position on current row
+var poss : bit(N)  -- Possible positions of queen on current row
+var l    : bit(N)  -- Squares attacked on current row due to left-diagonal
+var r    : bit(N)  -- " due to right-diagonal
+var d    : bit(N)  -- " due to column
+var hot  : bit(N)  -- Choice of queen position on current row
 
 poss := ~0 ;
 while poss /= 0 do

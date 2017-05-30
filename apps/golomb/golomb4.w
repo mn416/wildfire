@@ -26,16 +26,16 @@ const MidMark  = (NumMarks-1)/2
 opt StackWidth = ChunkLen
 
 -- Program state
-var ruler  : bit<LogChunks> -> bit<ChunkLen>
-var dist   : bit<LogChunks> -> bit<ChunkLen>
-var marks  : bit<5> = 1
-var len    : bit<10>
-var r      : bit<ChunkLen>
-var d      : bit<ChunkLen>
-var insert : bit<1>
-var carry  : bit<ChunkLen>
-var i      : bit<LogChunks>
-var ok     : bit<1>
+var ruler  : bit(LogChunks) -> bit(ChunkLen)
+var dist   : bit(LogChunks) -> bit(ChunkLen)
+var marks  : bit(5) = 1
+var len    : bit(10)
+var r      : bit(ChunkLen)
+var d      : bit(ChunkLen)
+var insert : bit(1)
+var carry  : bit(ChunkLen)
+var i      : bit(LogChunks)
+var ok     : bit(1)
 
 ruler[0] := 1 ;
 while marks /= NumMarks do

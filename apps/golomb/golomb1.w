@@ -13,9 +13,9 @@ opt StackWidth = 40
 opt ProcessorsPerRom = 2
 
 -- Program state
-var ruler : bit<N> = 1  -- Positions of marks on ruler
-var dist  : bit<N> = 0  -- Distances measured by ruler
-var marks : bit<5> = 1  -- Number of marks made so far
+var ruler : bit(N) = 1  -- Positions of marks on ruler
+var dist  : bit(N) = 0  -- Distances measured by ruler
+var marks : bit(5) = 1  -- Number of marks made so far
 
 while marks /= NumMarks do
   if msb(ruler) == 1 then fail end ;

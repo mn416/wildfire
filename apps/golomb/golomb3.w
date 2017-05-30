@@ -21,14 +21,14 @@ opt StackWidth = 40
 opt ProcessorsPerRom = 2
 
 -- Program state
-var ruler    : bit<N>  = 1  -- Positions of marks on ruler
-var dist     : bit<N>  = 0  -- Distances measured by ruler
-var remMarks : bit<5>  = RemMarks  -- Num remaining marks
-var remLen   : bit<10> = MaxLength -- Remaining length
-var n        : bit<10>
+var ruler    : bit(N)  = 1  -- Positions of marks on ruler
+var dist     : bit(N)  = 0  -- Distances measured by ruler
+var remMarks : bit(5)  = RemMarks  -- Num remaining marks
+var remLen   : bit(10) = MaxLength -- Remaining length
+var n        : bit(10)
 
 -- Table of optimal rulers with fewer than NumMarks
-var ogr : bit<5> -> bit<10> = "ogr.mif"
+var ogr : bit(5) -> bit(10) = "ogr.mif"
 
 while remMarks /= 0 do
   if msb(ruler) == 1 then fail end ;

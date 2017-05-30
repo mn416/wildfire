@@ -11,8 +11,8 @@ var next    : ThreadId -> OpId
 var mem     : Addr     -> Val
 var readers : Val      -> NumReaders
 
-var store : bit<1>
-var load  : bit<1>
+var store : bit(1)
+var load  : bit(1)
 var pc    : OpId
 var val   : Val
 var rs    : NumReaders

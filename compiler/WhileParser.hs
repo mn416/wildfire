@@ -83,20 +83,20 @@ constEval env e =
     err k  = error ("In 'const' expression, unbound variable: " ++ show k)
     log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
 
-constExpr :: ConstMap -> Parser ConstMap
-constExpr env = do
+constDecl :: ConstMap -> Parser ConstMap
+constDecl env = do
   reserved "const"
   id <- identifier
   reserved "="
   e <- expr env
   return (Map.insert id (constEval env e) env)
 
-constExprs :: ConstMap -> Parser ConstMap
-constExprs env = do
-  m <- optionMaybe (constExpr env)
+constDecls :: ConstMap -> Parser ConstMap
+constDecls env = do
+  m <- optionMaybe (constDecl env)
   case m of
     Nothing   -> return env
-    Just env' -> constExprs env'
+    Just env' -> constDecls env'
 
 number :: ConstMap -> Parser Integer
 number env = natural <|> do
@@ -107,6 +107,14 @@ number env = natural <|> do
 
 num :: ConstMap -> Parser Int
 num env = pure fromInteger <*> number env
+
+constExpr :: ConstMap -> Parser Integer
+constExpr env = do
+  e <- expr env
+  return (constEval env e)
+
+constExprInt :: ConstMap -> Parser Int
+constExprInt env = pure fromInteger <*> constExpr env
 
 -- Expressions
 
@@ -211,9 +219,9 @@ initial env =
 bitType :: ConstMap -> Parser Int
 bitType env = do
   reserved "bit"
-  reservedOp "<"
-  n <- num env
-  reservedOp ">"
+  reservedOp "("
+  n <- constExprInt env
+  reservedOp ")"
   return n
 
 typ :: ConstMap -> Parser Type
@@ -241,7 +249,7 @@ compilerOpt env =
 
 prelude :: Parser (ConstMap, CompilerOpts, [Decl])
 prelude =
-  do env <- constExprs Map.empty
+  do env <- constDecls Map.empty
      items <- many (preludeItem env)
      let (opts, decls) = unzip items
      return (env, Map.unions opts, concat decls)
