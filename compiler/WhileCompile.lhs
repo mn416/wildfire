@@ -203,17 +203,17 @@ there are two cases:
 
 A statement s1 ? s2 is compiled to:
 
-  acquire j NEIGHBOURS(i) ;
+  acquire j NEIGHBOURS(i) ; tick ;
   if j /= 0 then
     v1[j] := v1[i] ;
     ... ;
     vn[j] := vn[i] ;
     forkjump spawnLabel[j]
   else
-    push stack[i] v1[i] ;
+    push stack[i] v1[i] ; tick ;
     ... ;
-    push stack[i] vn[i] ;
-    push stack[i] retLabel[i] 
+    push stack[i] vn[i] ; tick ;
+    push stack[i] retLabel[i] ; tick
   end ;
 
   s1 ; jump endLabel[i] ;
@@ -257,6 +257,112 @@ to jump to when the program finishes.
 Notice we release lock i because processor i is now available for new
 work. We also put the terminate label back on the stack so that
 processor i is ready for new work.
+
+Backtracking choice with array variables
+========================================
+
+We now extend the above compilation scheme to support array variables.
+
+A statement s1 ? s2 is compiled to:
+
+  acquire j NEIGHBOURS(i) ; tick ;
+  if j /= 0 then
+    forkjump array1_copy ;
+    ...
+    forkjump arrayn_copy ;
+    v1[j] := v1[i] ;
+    ... ;
+    vn[j] := vn[i] ;
+    tick ;
+    while array1(i)_copy_done == 0 | .. | arrayn(i)_copy_done == 0 do tick end ;
+    tick ;
+    forkjump spawnLabel[j]
+  else
+    array1(i)_save_marker := 1 ; forkjump array1(i)_save ;
+    ... ;
+    arrayn(i)_save_marker := 1 ; forkjump arrayn(i)_save ;
+    push stack[i] v1[i] ; tick ;
+    ... ;
+    push stack[i] vn[i] ; tick ;
+    push stack[i] retLabel[i] ; tick
+  end ;
+
+  s1 ; jump endLabel[i] ;
+
+  retLabel[i]:
+    pop vn[i] ;
+    ... ;
+    pop v1[i] ;
+    forkjump array1(i)_restore ;
+    ...
+    forkjump arrayn(i)_restore ;
+    while array1(i)_restored == 0 | .. | arrayn(i)_restored == 0 do tick end ;
+    tick ;
+  spawnLabel[i]:
+    s2 ;
+
+  endLabel[i]:
+
+Definitions of the save, copy, and restore blocks per array and per
+thread i are as follows.
+
+  array(i)_save:
+    array(i)_undo:A[array(i)_sp] :=
+      { array(i)_save_index, data(array(i):B), array(i)_save_marker } ;
+    array(i)_sp := array(i)_sp+1 ;
+    halt
+
+  array(i)_copy:
+    array(i)_iter := 0 ;
+    array(i)_copy_done := 0 ;
+    fetch array:B(i)[0] ;
+    tick ;
+    while array(i)_iter /= array(i)_len do
+      array(i)_write_addr := array(i)_iter ;
+      array(i)_write_val  := data(array:B(i)) ;
+      forkjump array(i)_write ;
+      fetch array:B(i)[array(i)_iter+1] ;
+      array(i)_iter := array(i)_iter+1 ;
+      tick ;
+    end ;
+    array(i)_copy_done := 1 ;
+    halt
+
+  array(i)_write:
+    tick ;
+    if bit 1 of _token(i) then
+      array:B(N(0))[array(i)_write_addr] := array(i)_write_val
+    end ;
+    ...
+    if bit n of _token(i) then
+      array:B(N(n))[array(i)_write_addr] := array(i)_write_val
+    end ;
+    halt
+
+  array(i)_restore:
+    array(i)_restored := 0 ;
+    fetch array(i)_undo:B[array(i)_sp-1] ;
+    tick ;
+    while ~array(i)_restore do
+      fetch array(i)_undo:B[array(i)_sp-2] ;
+      array(i)_sp := array(i)_sp-1 ;
+      let { index, value, marker } = data(array(i)_undo:B) ;
+      if marker then
+        array(i)_restore := 1
+      else
+        array(i):A[index] := value
+      end ;
+      tick
+    end
+    halt
+
+  terminate[i]:
+    array1(i)_sp := 0 ;
+    arrayn(i)_sp := 0 ;
+    ret := terminate[i] ; tick
+    push stack[i] ret ; tick
+    release i ; tick ;
+    halt
 
 Live variables
 ==============
@@ -339,9 +445,105 @@ barring different instances of variable names.)
 >
 >            ++ [ P.Label ("_terminate" # i) ]
 >            ++ [ ("_ret" # i) P.:= P.Lab ("_terminate" # i), P.Tick]
+>            ++ [ ("_" ++ (a # i) ++ "_sptr") P.:=
+>                    P.Lit Nothing 0 | a <- rwArrays]
 >            ++ [ P.Push ("_stack" # i) ["_ret" # i], P.Tick ]
 >            ++ [ P.Release ("_lock" # i), P.Tick ]
 >            ++ [ P.Halt ]
+>
+>            ++ [ snd (arrayRoutines v aw dw)
+>               | Decl v (TArray RW aw dw) init <- decls p ]
+>
+>     rwArrays = [v | Decl v (TArray RW aw dw) init <- decls p]
+>
+>     arrayRoutines a aw dw = (decls, code)
+>       where
+>         code = P.block $ 
+>                [ P.Label save ]
+>             ++ [ P.Store undo P.A (P.Var sp)
+>                          (P.Var saveIndex  `P.Concat`
+>                            P.RamOutput (a # i) P.B `P.Concat`
+>                              P.Var saveMarker) ]
+>             ++ [ sp P.:= P.Apply2 P.Add (P.Var sp) (P.Lit Nothing 1) ]
+>             ++ [ P.Halt ]
+>
+>             ++ [ P.Label copy ]
+>             ++ [ iter P.:= P.Lit Nothing 0 ]
+>             ++ [ done P.:= P.Lit Nothing 0 ]
+>             ++ [ P.Fetch (a # i) P.B (P.Lit Nothing 0) ]
+>             ++ [ P.Tick ]
+>             ++ [ P.While (P.Apply2 P.Neq (P.Var iter) iterMax) $
+>                         (writeAddr P.:= P.Select (aw-1) 0 (P.Var iter))
+>                    P.:> (writeVal  P.:= P.RamOutput (a # i) P.B)
+>                    P.:> (P.ForkJump write)
+>                    P.:> (P.Fetch (a # i) P.B (P.Select (aw-1) 0
+>                            (P.Apply2 P.Add (P.Var iter)
+>                                            (P.Lit Nothing 1))))
+>                    P.:> (iter P.:= P.Apply2 P.Add (P.Var iter)
+>                                      (P.Lit Nothing 1))
+>                    P.:> P.Tick ]
+>             ++ [ done P.:= P.Lit Nothing 1 ]
+>             ++ [ P.Halt ]
+>
+>             ++ [ P.Label write ]
+>             ++ [ P.Tick ]
+>             ++ [ P.Ifte (P.Select j j (P.Var dest))
+>                         (P.Store (a # n) P.B (P.Var writeAddr)
+>                                              (P.Var writeVal))
+>                         (P.Skip)
+>                | (j, n) <- zip [0..] neighbours ]
+>             ++ [ P.Halt ]
+>
+>             ++ [ P.Label restore ]
+>             ++ [ restored P.:= P.Lit Nothing 0 ]
+>             ++ [ P.Fetch undo P.B (P.Apply2 P.Sub (P.Var sp)
+>                                     (P.Lit Nothing 1)) ]
+>             ++ [ P.Tick ]
+>             ++ [ P.While (P.Apply1 P.Inv (P.Var restored)) $
+>                         P.Fetch undo P.B (P.Apply2 P.Sub (P.Var sp)
+>                                            (P.Lit Nothing 2))
+>                    P.:> (sp P.:= P.Apply2 P.Sub (P.Var sp)
+>                                    (P.Lit Nothing 1))
+>                    P.:> P.Ifte (P.Select 0 0 (P.RamOutput undo P.B))
+>                           (restored P.:= (P.Lit Nothing 1))
+>                           (P.Store (a # i) P.A
+>                              (P.Select (dw+aw) (dw+1) (P.RamOutput undo P.B))
+>                              (P.Select dw 1 (P.RamOutput undo P.B)))
+>                    P.:> P.Tick ]
+>             ++ [ P.Halt ]
+>
+>         decls =
+>           [ P.Decl undo (P.TRam undoDepth undoWidth) P.Uninit
+>           , P.Decl sp (P.TReg undoDepth) (P.IntInit 0)
+>           , P.Decl saveIndex (P.TReg aw) P.Uninit
+>           , P.Decl saveMarker (P.TReg 1) P.Uninit
+>           , P.Decl iter (P.TReg (aw+1)) P.Uninit
+>           , P.Decl done (P.TReg 1) P.Uninit
+>           , P.Decl writeAddr (P.TReg aw) P.Uninit
+>           , P.Decl writeVal (P.TReg dw) P.Uninit
+>           , P.Decl restored (P.TReg 1) P.Uninit
+>           ]
+>
+>         save        = "_" ++ (a # i) ++ "_save"
+>         undo        = "_" ++ (a # i) ++ "_undo"
+>         sp          = "_" ++ (a # i) ++ "_sptr"
+>         saveIndex   = "_" ++ (a # i) ++ "_save_index"
+>         saveMarker  = "_" ++ (a # i) ++ "_save_marker"
+>         copy        = "_" ++ (a # i) ++ "_copy"
+>         iter        = "_" ++ (a # i) ++ "_copy_iter"
+>         iterMax     = P.Lit Nothing (2 ^ aw)
+>         done        = "_" ++ (a # i) ++ "_copy_done"
+>         writeAddr   = "_" ++ (a # i) ++ "_write_addr"
+>         writeVal    = "_" ++ (a # i) ++ "_write_val"
+>         write       = "_" ++ (a # i) ++ "_write"
+>         dest        = "_token" # i
+>         restore     = "_" ++ (a # i) ++ "_restore"
+>         restored    = "_" ++ (a # i) ++ "_restored"
+>
+>         undoWidth = aw + dw + 1
+>         undoDepth = fromInteger $
+>           log2 (Map.findWithDefault 512 "UndoDepth" (opts p) - 1) + 1
+>
 >
 >     trExp :: Exp -> P.Exp
 >     trExp (Lit w n) = P.Lit w n
@@ -369,29 +571,58 @@ barring different instances of variable names.)
 >          let endLabel = endLabel' # i
 >          let token    = "_token" # i
 >          let spawnLabel = spawnLabel' # i
+>          let saveMarker a = "_" ++ (a # i) ++ "_save_marker"
+>          let arraySave a = "_" ++ (a # i) ++ "_save"
+>          let arrayCopy a = "_" ++ (a # i) ++ "_copy"
+>          let copyNotDone a = P.Apply1 P.Inv
+>                (P.Var ("_" ++ (a # i) ++ "_copy_done"))
+>          let waitCopyDone = if List.null rwArrays then [P.Tick] else
+>                [P.Tick, P.While (List.foldr1 (P.Apply2 P.Or)
+>                           (List.map copyNotDone rwArrays)) P.Tick, P.Tick]
+>          let arrayRestore a = "_" ++ (a # i) ++ "_restore"
+>          let restoreNotDone a = P.Apply1 P.Inv
+>                (P.Var ("_" ++ (a # i) ++ "_restored"))
+>          let waitRestoreDone = if List.null rwArrays then [P.Tick] else
+>                [P.Tick, P.While (List.foldr1 (P.Apply2 P.Or)
+>                           (List.map restoreNotDone rwArrays)) P.Tick, P.Tick]
 >          c1 <- trStm s1
 >          c2 <- trStm s2
->          let spawn bit j = P.Ifte (P.Select bit bit (P.Var token))
->                   (P.block $ [ (v # j) P.:= P.Var (v # i) | v <- live ]
->                           ++ [ P.Tick, P.ForkJump (spawnLabel' # j) ])
->                   P.Tick
->          let saveRestore = P.block $ intersperse P.Tick
->                               [ P.Push stack [v # i | v <- live ] ]
->                            ++ [ ret P.:= P.Lab retLabel, P.Tick ]
->                            ++ [ P.Push stack [ret], P.Tick ]
+>          let copyRegs bit j =
+>                P.Ifte (P.Select bit bit (P.Var token))
+>                       (P.block [ (v # j) P.:= P.Var (v # i) | v <- live ])
+>                       P.Skip
+>          let spawn bit j =
+>                P.Ifte (P.Select bit bit (P.Var token))
+>                       (P.ForkJump (spawnLabel' # j))
+>                       P.Skip
+>          let saveRestore = 
+>                P.block $ [ saveMarker a P.:= P.Lit Nothing 1 
+>                          | a <- rwArrays ]
+>                       ++ [ P.Tick | not (List.null rwArrays) ]
+>                       ++ [ P.ForkJump (arraySave a) | a <- rwArrays ]
+>                       ++ [ P.Push stack [v # i | v <- live ] ]
+>                       ++ [ ret P.:= P.Lab retLabel, P.Tick ]
+>                       ++ [ P.Push stack [ret], P.Tick ]
 >          return $ P.block $
 >            (if length neighbours > 0 then
 >                [ P.Acquire token ["_lock" # j | j <- neighbours]
 >                , P.Tick
 >                , P.Ifte (P.Apply2 P.Neq (P.Var token)
 >                                         (P.Lit (Just $ length neighbours) 0))
->                         (par [spawn bit j | (bit, j) <- zip [0..] neighbours])
+>                         (P.block $
+>                              [ P.ForkJump (arrayCopy a) | a <- rwArrays ]
+>                           ++ [ copyRegs bit j
+>                              | (bit, j) <- zip [0..] neighbours ]
+>                           ++ waitCopyDone
+>                           ++ [ spawn bit j
+>                              | (bit, j) <- zip [0..] neighbours])
 >                         saveRestore
 >                ] else [saveRestore])
 >            ++ [ c1, P.Jump endLabel ]
 >            ++ [ P.Label retLabel ]
+>            ++ [ P.ForkJump (arrayRestore a) | a <- rwArrays ]
 >            ++ [ P.Pop stack [v # i | v <- live ] ]
->            ++ [ P.Tick ]
+>            ++ waitRestoreDone
 >            ++ [ P.Label spawnLabel ]
 >            ++ [ c2 ]
 >            ++ [ P.Label endLabel ]
@@ -412,8 +643,13 @@ barring different instances of variable names.)
 >     trStm (ArrayLookup RW x a e) = return $
 >       P.Fetch (a # i) P.A (trExp e) P.:> P.Tick P.:>
 >       ((x # i) P.:= P.RamOutput (a # i) P.A) P.:> P.Tick
->     trStm (ArrayAssign a e1 e2) =
->       error "R/W arrays not yet supported"
+>     trStm (ArrayAssign a e1 e2) = return $
+>            P.Store (a # i) P.A (trExp e1) (trExp e2)
+>       P.:> P.Fetch (a # i) P.B (trExp e1)
+>       P.:> (("_" ++ (a # i) ++ "_save_index") P.:= trExp e1)
+>       P.:> (("_" ++ (a # i) ++ "_save_marker") P.:= P.Lit (Just 1) 0)
+>       P.:> P.Tick
+>       P.:> P.ForkJump ("_" ++ (a # i) ++ "_save")
 >
 >     trDecls :: [Decl] -> [P.Decl]
 >     trDecls ds =
@@ -425,6 +661,8 @@ barring different instances of variable names.)
 >      ++ [P.Decl ("_emit" # i) (P.TReg 1) P.Uninit]
 >      ++ [P.Decl ("_token" # i) (P.TReg (length neighbours)) P.Uninit
 >         | length neighbours > 0]
+>      ++ concat [ fst (arrayRoutines v aw dw)
+>                | Decl v (TArray RW aw dw) init <- ds ]
 >
 >     par [] = P.Skip
 >     par ss = P.Par ss
@@ -620,13 +858,15 @@ Top-level compiler
 >           -- translate (torus 10 10)
 >           -- translate (torus 25 25)
 >           -- translate (butterfly 6)
->           translate (wavefly 5 6)
+>           -- translate (wavefly 5 6)
 >           -- translate (butterfly 4)
 >           -- translate (torus 12 12)
 >           -- translate (torus 8 8)
 >           -- translate (wavefly 6 8)
 >           -- translate (wavefly 5 16)
 >           -- translate (torus 23 23)
+>           -- translate (torus 3 3)
+>           translate (torus 3 3)
 >         . annotateLive
 >         . typeCheck
 >         . arrayAnalysis

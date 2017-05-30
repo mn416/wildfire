@@ -15,6 +15,7 @@ An Intermediate Language for Hardware Compilation
 > import Data.Map as Map hiding ((!), foldr)
 > import Data.List as List
 > import Data.Bits (complement, (.&.), (.|.), xor, shiftL, shiftR)
+> import qualified Data.Set as Set
 
 Static Timing Analysis
 ======================
@@ -337,14 +338,22 @@ Desguar all Push and Pop statements into other constructs.
 > desugarStacks p =
 >   p { decls = decls p ++ concat [ [ Decl (m ++ "_sp") (TReg aw) (IntInit 0)
 >                                   , Decl (m ++ "_top") (TReg dw) (IntInit 0) ]
->                                  | Decl m (TRam aw dw) _ <- decls p ]
+>                                 | Decl m (TRam aw dw) _ <- decls p
+>                                 , m `Set.member` stackSet ]
 >     , code  = trStm (code p)
 >            :> Halt
 >            :> foldr (:>) Skip
 >                 [ pushOneCode aw s :> popOneCode aw s
->                 | Decl s (TRam aw dw) _ <- decls p ]
+>                 | Decl s (TRam aw dw) _ <- decls p
+>                 , s `Set.member` stackSet ]
 >     }
 >   where
+>     stacks (Push s _) = [s]
+>     stacks (Pop s _)  = [s]
+>     stacks stm = extract stacks stm
+>
+>     stackSet = Set.fromList $ stacks (code p)
+>
 >     trStm (Push s vs) = pushMany s vs
 >     trStm (Pop s vs) = popMany s vs
 >     trStm other = descend trStm other
