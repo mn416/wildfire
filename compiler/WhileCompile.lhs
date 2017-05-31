@@ -38,9 +38,13 @@ well-typed.  This function is not efficient.
 >       case env!v of
 >         TReg w -> Just w
 >         other  -> Nothing
->     widthOf (Apply1 P.MSB e) = Just 1
->     widthOf (Apply1 op e) = widthOf e
->     widthOf (Apply2 op e1 e2) = widthOf e1 `mplus` widthOf e2
+>     widthOf (Apply1 op e)
+>        | op `elem` [P.MSB] = Just 1
+>        | otherwise = widthOf e
+>     widthOf (Apply2 op e1 e2)
+>        | P.isCmpOp op = Just 1
+>        | otherwise    = widthOf e1 `mplus` widthOf e2
+>     widthOf (Truncate w e) = Just w
 >
 >     -- Type checker for expressions
 >     tcExp :: Int -> Exp -> Exp
@@ -49,17 +53,24 @@ well-typed.  This function is not efficient.
 >         ch (Lit Nothing n) = Lit (Just w) n
 >         ch (Lit (Just w') n) | w == w' = Lit (Just w) n
 >         ch (Var v) | env!v == TReg w = e
->         ch (Apply1 P.MSB e) =
->           case widthOf e of
->             Nothing -> typeError ("Can't determine width: " ++ (show e))
->             Just w  -> Apply1 P.MSB (tcExp w e)
->         ch (Apply1 op e) = Apply1 op (tcExp w e)
+>         ch (Apply1 op e)
+>           | op `elem` [P.MSB] =
+>               case widthOf e of
+>                 Nothing -> typeError ("Can't determine width: " ++ (show e))
+>                 Just w  -> Apply1 P.MSB (tcExp w e)
+>           | otherwise = Apply1 op (tcExp w e)
 >         ch (Apply2 op e1 e2)
 >           | P.isCmpOp op =
 >               case widthOf e1 `mplus` widthOf e2 of
 >                 Nothing -> typeErrorW (show e) w
 >                 Just w -> Apply2 op (tcExp w e1) (tcExp w e2)
 >           | not (P.isCmpOp op) = Apply2 op (tcExp w e1) (tcExp w e2)
+>         ch (Truncate n e)
+>           | n == w =
+>             case widthOf e of
+>               Nothing -> Truncate n (tcExp n e)
+>               Just m  -> if n <= m then Truncate n (tcExp m e)
+>                                    else typeErrorW (show (Truncate n e)) w
 >         ch other = typeErrorW (show other) w
 >
 >     -- Type checker for statements
@@ -75,12 +86,13 @@ well-typed.  This function is not efficient.
 >     tc (Choice s1 s2 live) = Choice (tc s1) (tc s2) live
 >     tc (ArrayAssign a e1 e2) =
 >       case env!a of
->         TArray _ aw dw -> ArrayAssign a (tcExp aw e1) (tcExp dw e2)
+>         TArray _ aw dw -> ArrayAssign a (tcExp aw (Truncate aw e1))
+>                                         (tcExp dw e2)
 >         other -> typeError ("Not an array: " ++ show a)
 >     tc (ArrayLookup m x a e) =
 >       case (env!x, env!a) of
 >         (TReg w, TArray _ aw dw) ->
->           if w == dw then ArrayLookup m x a (tcExp aw e) else
+>           if w == dw then ArrayLookup m x a (tcExp aw (Truncate aw e)) else
 >             typeError ("Width mismatch in lookup of array " ++ a)
 >         other -> typeError ("Expected " ++ a ++ " to be an array" ++
 >                             " and " ++ x ++ "to be a register")
@@ -550,6 +562,7 @@ barring different instances of variable names.)
 >     trExp (Var v) = P.Var (v # i)
 >     trExp (Apply1 op e) = P.Apply1 op (trExp e)
 >     trExp (Apply2 op e1 e2) = P.Apply2 op (trExp e1) (trExp e2)
+>     trExp (Truncate w e) = P.Select (w-1) 0 (trExp e)
 >
 >     trStm :: Stm -> Fresh P.Stm
 >     trStm Skip = return P.Skip

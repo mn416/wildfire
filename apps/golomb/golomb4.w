@@ -34,7 +34,7 @@ var r      : bit(ChunkLen)
 var d      : bit(ChunkLen)
 var insert : bit(1)
 var carry  : bit(ChunkLen)
-var i      : bit(LogChunks)
+var i      : bit(LogChunks+1)
 var ok     : bit(1)
 
 ruler[0] := 1 ;

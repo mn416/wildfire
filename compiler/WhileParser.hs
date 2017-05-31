@@ -58,7 +58,7 @@ constEval env e =
           Inv   -> complement i
           Shl n -> i `shiftL` n
           Shr n -> i `shiftR` n
-          Log   -> log2 i + 1 --if i == 1 then 0 else log2 (i - 1) + 1
+          Log   -> if i == 1 then 0 else log2 (i - 1) + 1
           _     -> error "Invalid 'const' expression"
     Apply2 op e1 e2 ->
       let i = constEval env e1

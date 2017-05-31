@@ -89,6 +89,8 @@ Expressions
 >   where
 >     a = eval env e1
 >     b = eval env e2
+> eval env (Truncate w e) =
+>   bitStr (val $ eval env e) w
 
 Statements
 ----------

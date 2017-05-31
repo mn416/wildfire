@@ -69,6 +69,7 @@ Expressions (arithmetic & conditions).
 >   | Var Id                    {- Variable reference -}
 >   | Apply1 UnaryOp Exp        {- Unary operator application -}
 >   | Apply2 BinOp Exp Exp      {- Binary operator application -}
+>   | Truncate Int Exp          {- Truncate to given width -}
 >     deriving Show
 
 Traversals
@@ -86,6 +87,7 @@ Traversals
 > instance Descend Exp where
 >   descendM f (Apply1 op e) = return (Apply1 op) `ap` f e
 >   descendM f (Apply2 op e1 e2) = return (Apply2 op) `ap` f e1 `ap` f e2
+>   descendM f (Truncate w e) = return (Truncate w) `ap` f e
 >   descendM f other = return other
 
 > onExp :: (Exp -> Exp) -> Stm -> Stm

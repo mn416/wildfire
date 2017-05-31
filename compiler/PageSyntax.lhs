@@ -111,7 +111,7 @@ Expressions (arithmetic & conditions).
 >   | Shl Int | Shr Int  {- Constant left and right shifts -}
 >   | MSB                {- Most significant bit -}
 >   | Log                {- Log base 2, round up -}
->     deriving Show
+>     deriving (Eq, Show)
 
 > data BinOp =
 >     And | Or  | Xor                    {- Bitwise -}
