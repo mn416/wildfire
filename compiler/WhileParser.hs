@@ -22,7 +22,7 @@ page = T.makeTokenParser $ emptyDef
   , reservedNames    = ["skip", "if", "then", "else", "end",
                         "while", "declare", "in", "fail",
                         "opt", "var", "const", "msb", "bit",
-                        "log"]
+                        "log", "type", "enum"]
   , caseSensitive    = True
   }
   
@@ -226,47 +226,67 @@ bitType env = do
 
 typ :: ConstMap -> Parser Type
 typ env = 
-  do n <- bitType env
-     m <- optionMaybe (reservedOp "->" *> bitType env)
-     case m of
-       Nothing -> return (TReg n)
-       Just dw -> return (TArray RW n dw)
+  do t1 <- baseType
+     m <- optionMaybe (reservedOp "->" *> baseType)
+     case m of 
+       Nothing -> return t1
+       Just t2 -> return (TArray RW t1 t2)
+  where
+    baseType =
+      do o  <- optionMaybe (bitType env)
+         case o of
+           Nothing -> pure TUser <*> identifier
+           Just n -> return (TBit n)
 
 log2 :: Integral a => a -> a
 log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
  
+typeDecl :: ConstMap -> Parser TypeDecl
+typeDecl env =
+      do reserved "type"
+         name <- identifier
+         reservedOp "="
+         t <- typ env
+         return (TSynonym name t)
+  <|> do reserved "enum"
+         name <- identifier
+         reservedOp "="
+         ids <- sepBy1 identifier (reservedOp "|")
+         return (TEnum name ids)
+
 -- Parse a compiler option
 
 compilerOpt :: ConstMap -> Parser CompilerOpts
 compilerOpt env =
   do reserved "opt"
      key <- identifier
-     reserved "="
+     reservedOp "="
      val <- number env
      return (Map.fromList [(key, val)])
 
 -- Parse program prelude
 
-prelude :: Parser (ConstMap, CompilerOpts, [Decl])
+prelude :: Parser (ConstMap, CompilerOpts, [Decl], [TypeDecl])
 prelude =
   do env <- constDecls Map.empty
      items <- many (preludeItem env)
-     let (opts, decls) = unzip items
-     return (env, Map.unions opts, concat decls)
+     let (opts, decls, typeDecls) = unzip3 items
+     return (env, Map.unions opts, concat decls, concat typeDecls)
 
-preludeItem :: ConstMap -> Parser (CompilerOpts, [Decl])
+preludeItem :: ConstMap -> Parser (CompilerOpts, [Decl], [TypeDecl])
 preludeItem env =
-      do { o <- compilerOpt env ; return (o, []) }
-  <|> do { d <- decl env ; return (Map.empty, [d]) }
+      do { o <- compilerOpt env ; return (o, [], []) }
+  <|> do { d <- decl env ; return (Map.empty, [d], []) }
+  <|> do { d <- typeDecl env ; return (Map.empty, [], [d]) }
 
 -- Programs
 
 prog :: Parser Prog
 prog =
   do whitespace
-     (env, opts, ds) <- prelude
+     (env, opts, ds, tds) <- prelude
      s <- stmt env
-     return (Prog opts ds s)
+     return (Prog opts tds ds s)
  
 parseProgFile :: SourceName -> IO Prog
 parseProgFile f = parseFromFile (prog <* eof) f >>= \result ->

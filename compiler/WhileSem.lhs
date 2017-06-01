@@ -125,14 +125,14 @@ Programs
 > initState env [] = return env
 > initState env (d:ds) =
 >   case (declType d, declInit d) of
->     (TReg w, P.Uninit) ->
+>     (TBit w, P.Uninit) ->
 >       initState (Map.insert (declId d) (IntVal (bitStr 0 w)) env) ds
->     (TReg w, P.IntInit n) ->
+>     (TBit w, P.IntInit n) ->
 >       initState (Map.insert (declId d) (IntVal (bitStr n w)) env) ds
->     (TArray _ aw dw, P.Uninit) -> do
+>     (TArray _ (TBit aw) (TBit dw), P.Uninit) -> do
 >       let z = Map.fromList [(bitStr a aw, bitStr 0 dw) | a <- [0..(2^aw)-1]]
 >       initState (Map.insert (declId d) (ArrayVal z) env) ds
->     (TArray _ aw dw, P.StrInit filename) -> do
+>     (TArray _ (TBit aw) (TBit dw), P.StrInit filename) -> do
 >       let z = Map.fromList [(bitStr a aw, bitStr 0 dw) | a <- [0..(2^aw)-1]]
 >       mif <- readMIF filename
 >       let m = Map.fromList [ (bitStr a aw, bitStr d dw)
@@ -143,7 +143,7 @@ Programs
 
 > run :: Prog -> IO ()
 > run p = do
->   let p' = typeCheck $ arrayAnalysis p
+>   let p' = typeCheck $ arrayAnalysis $ desugarTypes p
 >   env <- initState Map.empty (decls p')
 >   let results = exec env (code p')
 >   case results of

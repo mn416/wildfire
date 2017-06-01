@@ -9,35 +9,31 @@ const MaxLength = 127
 -- Num bits needed to represent ruler
 const N = MaxLength+1
 
--- Initial value for remaining marks
-const RemMarks = NumMarks-1
-
 -- For midpoint reduction rule
-const HalfLen = MaxLength/2
-const MidMark = (NumMarks+1)/2
+const MidPoint = (MaxLength+1)/2
+const HalfMarks = (NumMarks+1)/2
 
 -- Compiler options
 opt StackWidth = 40
+opt StackDepth = 1024
 
 -- Program state
-var ruler    : bit(N)  = 1  -- Positions of marks on ruler
-var dist     : bit(N)  = 0  -- Distances measured by ruler
-var remMarks : bit(5)  = RemMarks  -- Num remaining marks
-var remLen   : bit(10) = MaxLength -- Remaining length
-var n        : bit(10)
+var ruler : bit(N)  = 1  -- Positions of marks on ruler
+var dist  : bit(N)  = 0  -- Distances measured by ruler
+var marks : bit(5)  = 1  -- Number of marks placed
+var len   : bit(10) -- Current length
 
-while remMarks /= 0 do
-  if msb(ruler) == 1 then fail end ;
-  -- Midpoint reduction
-  if (remMarks == MidMark) & (remLen < HalfLen) then fail end ;
+while marks /= NumMarks do
+  if (msb(ruler) == 1) |
+       ((marks < HalfMarks) & (len > MidPoint)) then fail end ;
   -- Shift algorithm
   if (ruler & dist) == 0 then
-      (ruler := ruler << 1)
-    ? (remMarks := remMarks - 1 ||
+      (marks := marks + 1 ||
        dist  := dist | ruler ;
        ruler := (ruler << 1) | 1)
+    ? (ruler := ruler << 1)
   else
     ruler := ruler << 1
   end ;
-  remLen := remLen - 1
+  len := len + 1
 end

@@ -20,10 +20,10 @@ var marks : bit(5) = 1  -- Number of marks made so far
 while marks /= NumMarks do
   if msb(ruler) == 1 then fail end ;
   if (ruler & dist) == 0 then
-      (ruler := ruler << 1)
-    ? (marks := marks + 1 ||
+      (marks := marks + 1 ||
        dist  := dist | ruler ;
        ruler := (ruler << 1) | 1)
+    ? (ruler := ruler << 1)
   else
     ruler := ruler << 1
   end

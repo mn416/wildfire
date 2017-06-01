@@ -4,8 +4,8 @@
 -- This version avoids long bit-vectors through chunking
 
 -- Search for ruler with NumMarks and MaxLength
-const NumMarks  = 8
-const MaxLength = 34
+const NumMarks  = 7
+const MaxLength = 25
 
 -- Num bits needed to represent ruler
 const NumBits = MaxLength+1
@@ -19,8 +19,8 @@ const NumChunks = (NumBits+ChunkLenMinusOne) / ChunkLen
 const LogChunks = log(NumChunks)
 
 -- For midpoint reduction rule
-const MidPoint = (MaxLength+1)/2
-const MidMark  = (NumMarks-1)/2
+const MidPoint  = (MaxLength+1)/2
+const HalfMarks = (NumMarks+1)/2
 
 -- Compiler options
 opt StackWidth = ChunkLen
@@ -40,7 +40,7 @@ var ok     : bit(1)
 ruler[0] := 1 ;
 while marks /= NumMarks do
   if len == MaxLength then fail end ;
-  if (marks == MidMark) & (len > MidPoint) then fail end ;
+  if (marks < HalfMarks) & (len > MidPoint) then fail end ;
 
   i := 0 || ok := 1 ;
   while ok & (i /= NumChunks) do
@@ -51,7 +51,7 @@ while marks /= NumMarks do
   end ;
 
   insert := 0 || carry := 0 ;
-  if ok then skip ? (insert := 1 || carry := 1 || marks := marks+1) end ;
+  if ok then (insert := 1 || carry := 1 || marks := marks+1) ? skip end ;
 
   i := 0 || len := len+1 ;
   while i /= NumChunks do

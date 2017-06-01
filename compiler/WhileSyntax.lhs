@@ -12,6 +12,7 @@ A program consists of identifier declarations and a statement.
 
 > data Prog = 
 >   Prog { opts  :: CompilerOpts
+>        , types :: [TypeDecl]
 >        , decls :: [Decl]
 >        , code  :: Stm
 >        }
@@ -30,8 +31,9 @@ A declaration associates an identifier with a type.
 > type Id = String
 
 > data Type =
->     TReg Width                {- Register with width -}
->   | TArray ArrayMode Int Int  {- Array with address and data widths -}
+>     TBit Width                 {- Register with width -}
+>   | TArray ArrayMode Type Type {- Array with address and data types -}
+>   | TUser Id                   {- User-defined type -}
 >     deriving (Eq, Show)
 
 > type Width = Int
@@ -71,6 +73,13 @@ Expressions (arithmetic & conditions).
 >   | Apply2 BinOp Exp Exp      {- Binary operator application -}
 >   | Truncate Int Exp          {- Truncate to given width -}
 >     deriving Show
+
+Type declarations
+
+> data TypeDecl =
+>    TSynonym Id Type
+>  | TEnum Id [Id]
+>  deriving (Eq, Show)
 
 Traversals
 ==========

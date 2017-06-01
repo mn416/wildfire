@@ -2,6 +2,7 @@
 >   compile       -- :: Prog -> P.Prog
 > , typeCheck     -- :: Prog -> Prog
 > , arrayAnalysis -- :: Prog -> Prog
+> , desugarTypes  -- :: Prog -> Prog
 > ) where
 
 > import Netlist
@@ -36,7 +37,7 @@ well-typed.  This function is not efficient.
 >     widthOf (Lit w n) = w
 >     widthOf (Var v) =
 >       case env!v of
->         TReg w -> Just w
+>         TBit w -> Just w
 >         other  -> Nothing
 >     widthOf (Apply1 op e)
 >        | op `elem` [P.MSB] = Just 1
@@ -52,7 +53,7 @@ well-typed.  This function is not efficient.
 >       where
 >         ch (Lit Nothing n) = Lit (Just w) n
 >         ch (Lit (Just w') n) | w == w' = Lit (Just w) n
->         ch (Var v) | env!v == TReg w = e
+>         ch (Var v) | env!v == TBit w = e
 >         ch (Apply1 op e)
 >           | op `elem` [P.MSB] =
 >               case widthOf e of
@@ -78,7 +79,7 @@ well-typed.  This function is not efficient.
 >     tc (s1 :> s2) = tc s1 :> tc s2
 >     tc (v := e) =
 >       case env!v of
->         TReg n -> v := tcExp n e
+>         TBit n -> v := tcExp n e
 >         other  -> typeError (show (v := e))
 >     tc (s1 :|| s2) = tc s1 :|| tc s2
 >     tc (Ifte e s1 s2) = Ifte (tcExp 1 e) (tc s1) (tc s2)
@@ -86,12 +87,13 @@ well-typed.  This function is not efficient.
 >     tc (Choice s1 s2 live) = Choice (tc s1) (tc s2) live
 >     tc (ArrayAssign a e1 e2) =
 >       case env!a of
->         TArray _ aw dw -> ArrayAssign a (tcExp aw (Truncate aw e1))
->                                         (tcExp dw e2)
+>         TArray _ (TBit aw) (TBit dw) ->
+>           ArrayAssign a (tcExp aw (Truncate aw e1))
+>                         (tcExp dw e2)
 >         other -> typeError ("Not an array: " ++ show a)
 >     tc (ArrayLookup m x a e) =
 >       case (env!x, env!a) of
->         (TReg w, TArray _ aw dw) ->
+>         (TBit w, TArray _ (TBit aw) (TBit dw)) ->
 >           if w == dw then ArrayLookup m x a (tcExp aw (Truncate aw e)) else
 >             typeError ("Width mismatch in lookup of array " ++ a)
 >         other -> typeError ("Expected " ++ a ++ " to be an array" ++
@@ -104,10 +106,51 @@ well-typed.  This function is not efficient.
 >     tcDecl d =
 >       case d of
 >         Decl v _ P.Uninit -> d
->         Decl v (TReg n) (P.IntInit i) -> d
+>         Decl v (TBit n) (P.IntInit i) -> d
 >         Decl v (TArray RO _ _) (P.StrInit s) -> d
 >         Decl v _ _ -> typeError ("Invalid initialiser for variable " ++ v)
 >         other -> other
+
+Type desugaring
+===============
+
+This pass translates user-defined types in the program to primitive
+types.
+
+> desugarTypes :: Prog -> Prog
+> desugarTypes p =
+>   p { types = []
+>     , decls = List.map trDecl (decls p)
+>     , code  = onExp trExp (code p)
+>     }
+>   where
+>     desugarType nest env (TUser id) = env!id
+>     desugarType True env (TArray m t1 t2) =
+>       error "Nested array types are disallowed"
+>     desugarType False env (TArray m t1 t2) =
+>       TArray m (desugarType True env t1) (desugarType True env t2)
+>     desugarType nest env (TBit n) = TBit n
+>
+>     mkTypeEnv env [] = env
+>     mkTypeEnv env (TSynonym x t:ds) =
+>       mkTypeEnv (Map.insert x (desugarType False env t) env) ds
+>     mkTypeEnv env (TEnum x ctrs:ds) =
+>       let width = log2 (length ctrs - 1) + 1 in
+>         mkTypeEnv (Map.insert x (TBit width) env) ds
+>     
+>     typeEnv = mkTypeEnv Map.empty (types p)
+>
+>     trDecl d = d { declType = desugarType False typeEnv (declType d) }
+>
+>     ctrEnv = Map.fromList
+>       [ let w = log2 (length ctrs - 1) + 1 in (c, Lit (Just w) n) 
+>       | TEnum x ctrs <- types p, (n, c) <- zip [0..] ctrs ]
+>
+>     trExp (Var v) =
+>       case Map.lookup v ctrEnv of
+>         Nothing  -> Var v
+>         Just lit -> lit
+>     trExp other = descend trExp other
 
 Array analysis
 ==============
@@ -464,7 +507,7 @@ barring different instances of variable names.)
 >            ++ [ P.Halt ]
 >
 >            ++ [ snd (arrayRoutines v aw dw)
->               | Decl v (TArray RW aw dw) init <- decls p ]
+>               | Decl v (TArray RW (TBit aw) (TBit dw)) init <- decls p ]
 >
 >     rwArrays = [v | Decl v (TArray RW aw dw) init <- decls p]
 >
@@ -666,16 +709,16 @@ barring different instances of variable names.)
 >
 >     trDecls :: [Decl] -> [P.Decl]
 >     trDecls ds =
->         [P.Decl (v # i) (P.TReg n) init | Decl v (TReg n) init <- ds]
+>         [P.Decl (v # i) (P.TReg n) init | Decl v (TBit n) init <- ds]
 >      ++ [P.Decl (v # i) (P.TRam aw dw) init
->         | Decl v (TArray RW aw dw) init <- ds]
+>         | Decl v (TArray RW (TBit aw) (TBit dw)) init <- ds]
 >      ++ [P.Decl ("_stack" # i) (P.TRam stackDepth stackWidth) P.Uninit]
 >      ++ [P.Decl ("_ret" # i) (P.TLab []) P.Uninit]
 >      ++ [P.Decl ("_emit" # i) (P.TReg 1) P.Uninit]
 >      ++ [P.Decl ("_token" # i) (P.TReg (length neighbours)) P.Uninit
 >         | length neighbours > 0]
 >      ++ concat [ fst (arrayRoutines v aw dw)
->                | Decl v (TArray RW aw dw) init <- ds ]
+>                | Decl v (TArray RW (TBit aw) (TBit dw)) init <- ds ]
 >
 >     par [] = P.Skip
 >     par ss = P.Par ss
@@ -684,7 +727,9 @@ barring different instances of variable names.)
 >     stackDepth = fromInteger $
 >       log2 (Map.findWithDefault 512 "StackDepth" (opts p) - 1) + 1
 >
->     log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
+
+> log2 :: Integral a => a -> a
+> log2 n = if n == 1 then 0 else 1 + log2 (n `div` 2)
 
 A network is a mapping from node ids to neighbouring node ids.
 
@@ -773,7 +818,7 @@ of nodes.)
 >       ++ [ P.Decl ("_done" # i) (P.TReg 1) P.Uninit | i <- [0..n] ]
 >       ++ concatMap P.decls ps
 >       ++ [ P.Decl v (P.TRom aw dw) init
->          | Decl v (TArray RO aw dw) init <- decls p]
+>          | Decl v (TArray RO (TBit aw) (TBit dw)) init <- decls p]
 
 > (#) :: String -> Int -> String
 > v # i = v ++ "[" ++ show i ++ "]"
@@ -878,9 +923,11 @@ Top-level compiler
 >           -- translate (wavefly 6 8)
 >           -- translate (wavefly 5 16)
 >           -- translate (torus 23 23)
->           -- translate (torus 3 3)
->           translate (torus 3 3)
+>           --translate (torus 3 3)
+>           --translate (wavefly 4 5)
+>           translate (wavefly 4 8)
 >         . annotateLive
 >         . typeCheck
 >         . arrayAnalysis
 >         . staticRestrictions
+>         . desugarTypes
