@@ -1,50 +1,65 @@
 -- Golomb ruler solver
--- Uses the "shift algorithm" due to W.  Rankin & D. McCracken
--- Includes "midpoint reduction" and "maximum position reduction"
+-- Uses the "shift algorithm" due to W. Rankin & D. McCracken
+-- Includes "midpoint reduction" pruning rule
+-- This version avoids long bit-vectors through chunking
 
 -- Search for ruler with NumMarks and MaxLength
-const NumMarks  = 11
-const MaxLength = 72
+const NumMarks  = 8
+const MaxLength = 34
 
 -- Num bits needed to represent ruler
-const N = MaxLength+1
+const NumBits = MaxLength+1
 
--- Initial value for remaining marks
-const RemMarks = NumMarks-1
+-- Ruler is divided into chunks of this size
+const ChunkLen = 20
+const ChunkLenMinusOne = ChunkLen-1
+
+-- Number of chunks needed to represent ruler
+const NumChunks = (NumBits+ChunkLenMinusOne) / ChunkLen
+const LogChunks = log(NumChunks)
 
 -- For midpoint reduction rule
-const HalfLen = MaxLength/2
-const MidMark = (NumMarks+1)/2
+const MidPoint = (MaxLength+1)/2
+const MidMark  = (NumMarks-1)/2
 
 -- Compiler options
-opt StackWidth = 40
-opt ProcessorsPerRom = 2
+opt StackWidth = ChunkLen
 
 -- Program state
-var ruler    : bit(N)  = 1  -- Positions of marks on ruler
-var dist     : bit(N)  = 0  -- Distances measured by ruler
-var remMarks : bit(5)  = RemMarks  -- Num remaining marks
-var remLen   : bit(10) = MaxLength -- Remaining length
-var n        : bit(10)
+var ruler  : bit(LogChunks) -> bit(ChunkLen)
+var dist   : bit(LogChunks) -> bit(ChunkLen)
+var marks  : bit(5) = 1
+var len    : bit(10)
+var r      : bit(ChunkLen)
+var d      : bit(ChunkLen)
+var insert : bit(1)
+var carry  : bit(ChunkLen)
+var i      : bit(LogChunks+1)
+var ok     : bit(1)
 
--- Table of optimal rulers with fewer than NumMarks
-var ogr : bit(5) -> bit(10) = "ogr.mif"
+ruler[0] := 1 ;
+while marks /= NumMarks do
+  if len == MaxLength then fail end ;
+  if (marks == MidMark) & (len > MidPoint) then fail end ;
 
-while remMarks /= 0 do
-  if msb(ruler) == 1 then fail end ;
-  -- Midpoint reduction
-  if (remMarks == MidMark) & (remLen < HalfLen) then fail end ;
-  -- Maximum position reduction
-  n := ogr[remMarks] ;
-  if (remLen < n) then fail end ;
-  -- Shift algorithm
-  if (ruler & dist) == 0 then
-      (ruler := ruler << 1)
-    ? (remMarks := remMarks - 1 ||
-       dist  := dist | ruler ;
-       ruler := (ruler << 1) | 1)
-  else
-    ruler := ruler << 1
+  i := 0 || ok := 1 ;
+  while ok & (i /= NumChunks) do
+       r := ruler[i]
+    || d := dist[i]
+     ; ok := ok & ((r&d) == 0)
+    || i := i+1
   end ;
-  remLen := remLen - 1
+
+  insert := 0 || carry := 0 ;
+  if ok then skip ? (insert := 1 || carry := 1 || marks := marks+1) end ;
+
+  i := 0 || len := len+1 ;
+  while i /= NumChunks do
+       r := ruler[i]
+    || d := dist[i]
+     ; ruler[i] := (r << 1) | carry
+    || if insert then dist[i] := d|r end
+     ; carry := r >> ChunkLenMinusOne
+    || i := i+1
+  end
 end
