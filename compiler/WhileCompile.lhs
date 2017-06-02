@@ -46,6 +46,9 @@ well-typed.  This function is not efficient.
 >        | P.isCmpOp op = Just 1
 >        | otherwise    = widthOf e1 `mplus` widthOf e2
 >     widthOf (Truncate w e) = Just w
+>     widthOf (Select a b e) = Just (1+a-b)
+>     widthOf (Concat e1 e2) =
+>       return (+) `ap` widthOf e1 `ap` widthOf e2
 >
 >     -- Type checker for expressions
 >     tcExp :: Int -> Exp -> Exp
@@ -72,6 +75,22 @@ well-typed.  This function is not efficient.
 >               Nothing -> Truncate n (tcExp n e)
 >               Just m  -> if n <= m then Truncate n (tcExp m e)
 >                                    else typeErrorW (show (Truncate n e)) w
+>         ch (Select a b e)
+>           | n == w =
+>             case widthOf e of
+>               Nothing -> Select a b (tcExp n e)
+>               Just m  -> if a+1 <= m then Select a b (tcExp m e)
+>                                      else typeErrorW (show (Select a b e)) w
+>           where n = 1+a-b
+>         ch (Concat e1 e2) =
+>           case (widthOf e1, widthOf e2) of
+>             (Just x, Just y)
+>               | w == x+y -> Concat (tcExp x e1) (tcExp y e2)
+>             (Just x, Nothing)
+>               | x < w -> Concat (tcExp x e1) (tcExp (w-x) e2)
+>             (Nothing, Just y)
+>               | y < w -> Concat (tcExp (w-y) e1) (tcExp y e2)
+>             other -> typeErrorW (show (Concat e1 e2)) w
 >         ch other = typeErrorW (show other) w
 >
 >     -- Type checker for statements
@@ -137,6 +156,10 @@ types.
 >     mkTypeEnv env (TEnum x ctrs:ds) =
 >       let width = log2 (length ctrs - 1) + 1 in
 >         mkTypeEnv (Map.insert x (TBit width) env) ds
+>     mkTypeEnv env (TRec x fs:ds) =
+>       let ts = [desugarType False env t | (f, t) <- fs]
+>           w  = sum [n | TBit n <- ts]
+>       in  mkTypeEnv (Map.insert x (TBit w) env) ds
 >     
 >     typeEnv = mkTypeEnv Map.empty (types p)
 >
@@ -146,10 +169,36 @@ types.
 >       [ let w = log2 (length ctrs - 1) + 1 in (c, Lit (Just w) n) 
 >       | TEnum x ctrs <- types p, (n, c) <- zip [0..] ctrs ]
 >
+>     env = Map.fromList [ (declId d, declType d) | d <- decls p ]
+>
+>     mkFieldMap n acc [] = acc
+>     mkFieldMap n acc ((f, t):rest) =
+>       case desugarType False typeEnv t of
+>         TBit w -> let acc' = Map.insert f (t, w+n-1, n) acc in
+>                     mkFieldMap (w+n) acc' rest
+>         other -> error ("Disallowed type in record: " ++ show t)
+>
+>     fieldMap = Map.fromList
+>        [ (x, mkFieldMap 0 Map.empty fs) | TRec x fs <- types p ]
+>
+>     select e t [] = e
+>     select e t (f:fs) =
+>       case t of
+>         TUser typeName ->
+>           case Map.lookup typeName fieldMap of
+>             Nothing -> error ("Unknown record type: " ++ typeName)
+>             Just m ->
+>               case Map.lookup f m of
+>                 Nothing -> error ("Unknown field: " ++ f)
+>                 Just (tf, a, b) ->
+>                   select (Select a b e) tf fs
+>         other -> error ("Not a record type: " ++ show e)
+>     
 >     trExp (Var v) =
 >       case Map.lookup v ctrEnv of
 >         Nothing  -> Var v
 >         Just lit -> lit
+>     trExp (RecSel v fs) = select (Var v) (env!v) fs
 >     trExp other = descend trExp other
 
 Array analysis
@@ -395,7 +444,7 @@ thread i are as follows.
     halt
 
   array(i)_restore:
-    array(i)_restored := 0 ;
+    array(i)_restored := array(i)_sp == 0 ;
     fetch array(i)_undo:B[array(i)_sp-1] ;
     tick ;
     while ~array(i)_restore do
@@ -429,8 +478,9 @@ semantically equivalent to sequential execution in any order.
 
 > live :: Stm -> [Id] -> [Id]
 > live (x := e) vs = nub (use e) `List.union` (vs List.\\ [x])
-> live (Ifte e s1 s2) vs = live s1 vs `List.union` live s2 vs
-> live (While e s) vs = live s [] `List.union` vs
+> live (Ifte e s1 s2) vs =
+>   nub (use e) `List.union` live s1 vs `List.union` live s2 vs
+> live (While e s) vs = nub (use e) `List.union` live s [] `List.union` vs
 > live (s1 :> s2) vs = live s1 (live s2 vs)
 > live (s1 :|| s2) vs = live s1 (live s2 vs)
 > live (Choice s1 s2 _) vs = live s1 vs `List.union` live s2 vs
@@ -550,7 +600,7 @@ barring different instances of variable names.)
 >             ++ [ P.Halt ]
 >
 >             ++ [ P.Label restore ]
->             ++ [ restored P.:= P.Lit Nothing 0 ]
+>             ++ [ restored P.:= P.Apply2 P.Eq (P.Var sp) (P.Lit Nothing 0) ]
 >             ++ [ P.Fetch undo P.B (P.Apply2 P.Sub (P.Var sp)
 >                                     (P.Lit Nothing 1)) ]
 >             ++ [ P.Tick ]
@@ -606,6 +656,8 @@ barring different instances of variable names.)
 >     trExp (Apply1 op e) = P.Apply1 op (trExp e)
 >     trExp (Apply2 op e1 e2) = P.Apply2 op (trExp e1) (trExp e2)
 >     trExp (Truncate w e) = P.Select (w-1) 0 (trExp e)
+>     trExp (Select a b e) = P.Select a b (trExp e)
+>     trExp (Concat e1 e2) = P.Concat (trExp e1) (trExp e2)
 >
 >     trStm :: Stm -> Fresh P.Stm
 >     trStm Skip = return P.Skip

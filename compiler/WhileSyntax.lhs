@@ -69,9 +69,12 @@ Expressions (arithmetic & conditions).
 > data Exp =
 >     Lit (Maybe Width) Integer {- Integer literal of given width -}
 >   | Var Id                    {- Variable reference -}
+>   | RecSel Id [Id]            {- Record selector -}
 >   | Apply1 UnaryOp Exp        {- Unary operator application -}
 >   | Apply2 BinOp Exp Exp      {- Binary operator application -}
 >   | Truncate Int Exp          {- Truncate to given width -}
+>   | Select Int Int Exp        {- Bit vector slice -}
+>   | Concat Exp Exp            {- Bit vector concatenation -}
 >     deriving Show
 
 Type declarations
@@ -79,6 +82,7 @@ Type declarations
 > data TypeDecl =
 >    TSynonym Id Type
 >  | TEnum Id [Id]
+>  | TRec Id [(Id, Type)]
 >  deriving (Eq, Show)
 
 Traversals
@@ -97,6 +101,8 @@ Traversals
 >   descendM f (Apply1 op e) = return (Apply1 op) `ap` f e
 >   descendM f (Apply2 op e1 e2) = return (Apply2 op) `ap` f e1 `ap` f e2
 >   descendM f (Truncate w e) = return (Truncate w) `ap` f e
+>   descendM f (Select a b e) = return (Select a b) `ap` f e
+>   descendM f (Concat e1 e2) = return Concat `ap` f e1 `ap` f e2
 >   descendM f other = return other
 
 > onExp :: (Exp -> Exp) -> Stm -> Stm

@@ -91,6 +91,14 @@ Expressions
 >     b = eval env e2
 > eval env (Truncate w e) =
 >   bitStr (val $ eval env e) w
+> eval env (Concat e1 e2) =
+>   bitStr (val a `shiftL` width b .|. val b) (width a + width b)
+>   where
+>     a = eval env e1
+>     b = eval env e2
+> eval env (Select a b e) =
+>   bitStr (val r `shiftR` b) (1+a-b)
+>   where r = eval env e
 
 Statements
 ----------

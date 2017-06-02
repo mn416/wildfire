@@ -22,7 +22,7 @@ page = T.makeTokenParser $ emptyDef
   , reservedNames    = ["skip", "if", "then", "else", "end",
                         "while", "declare", "in", "fail",
                         "opt", "var", "const", "msb", "bit",
-                        "log", "type", "enum"]
+                        "log", "type", "enum", "rec", "struct"]
   , caseSensitive    = True
   }
   
@@ -42,6 +42,20 @@ stringLiteral = T.stringLiteral page
 lexeme = T.lexeme page
 whitespace = T.whiteSpace page
 
+-- Dotted identifier
+dottedIdentifier = lexeme $ do
+  x  <- letter
+  xs <- many (letter <|> char '_' <|> digit <|> char '.')
+  return (x:xs)
+  
+-- Split dotted identifier
+split :: String -> [String]
+split s = sp [] s
+  where
+    sp acc [] = [reverse acc]
+    sp acc (c:cs) =
+      if c == '.' then reverse acc : sp "" cs else sp (c:acc) cs
+
 -- Parse a "const" expression
 -- (These expressions are evaluated by the parser)
 
@@ -58,7 +72,7 @@ constEval env e =
           Inv   -> complement i
           Shl n -> i `shiftL` n
           Shr n -> i `shiftR` n
-          Log   -> if i == 1 then 0 else log2 (i - 1) + 1
+          Log   -> if i <= 1 then 1 else log2 (i - 1) + 1
           _     -> error "Invalid 'const' expression"
     Apply2 op e1 e2 ->
       let i = constEval env e1
@@ -126,6 +140,7 @@ expBinOp' op f assoc = Infix (reservedOp op >> return f) assoc
 
 opTable =
   [ [ expUnOp "~" Inv ]
+  , [ Infix (reservedOp "++" >> return Concat) AssocRight]
   , [ expBinOp' ">>" shiftr AssocLeft, expBinOp' "<<" shiftl AssocLeft]
   , [ expBinOp "*" Mul AssocLeft, expBinOp "/" Div AssocLeft
     , expBinOp "&" And AssocLeft ]
@@ -149,14 +164,16 @@ expr env = buildExpressionParser opTable (expr' env)
 expr' :: ConstMap -> Parser Exp
 expr' env =
         pure (Lit Nothing) <*> natural
-    <|> do {
-          v <- identifier ;
-          case Map.lookup v env of
-            Just i  -> return (Lit Nothing i)
-            Nothing -> return (Var v)
-        }
     <|> pure (Apply1 MSB) <*> (reserved "msb" *> parens (expr env))
     <|> pure (Apply1 Log) <*> (reserved "log" *> parens (expr env))
+    <|> do {
+          v <- dottedIdentifier ;
+          case Map.lookup v env of
+            Just i  -> return (Lit Nothing i)
+            Nothing -> case split v of
+                         [v]  -> return (Var v)
+                         x:xs -> return (RecSel x xs)
+        }
     <|> parens (expr env)
 
 -- Statements
@@ -233,7 +250,7 @@ typ env =
        Just t2 -> return (TArray RW t1 t2)
   where
     baseType =
-      do o  <- optionMaybe (bitType env)
+      do o <- optionMaybe (bitType env)
          case o of
            Nothing -> pure TUser <*> identifier
            Just n -> return (TBit n)
@@ -253,6 +270,19 @@ typeDecl env =
          reservedOp "="
          ids <- sepBy1 identifier (reservedOp "|")
          return (TEnum name ids)
+  <|> do (reserved "rec" <|> reserved "struct")
+         name <- identifier
+         reservedOp "="
+         reservedOp "{"
+         fields <- sepBy1 field comma
+         reservedOp "}"
+         return (TRec name fields)
+  where
+    field = do
+      id <- identifier 
+      reserved ":"
+      t <- typ env
+      return (id, t)
 
 -- Parse a compiler option
 

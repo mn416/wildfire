@@ -4,14 +4,14 @@
 -- This version avoids long bit-vectors through chunking
 
 -- Search for ruler with NumMarks and MaxLength
-const NumMarks  = 7
-const MaxLength = 25
+const NumMarks  = 14
+const MaxLength = 127
 
 -- Num bits needed to represent ruler
 const NumBits = MaxLength+1
 
 -- Ruler is divided into chunks of this size
-const ChunkLen = 20
+const ChunkLen = 40
 const ChunkLenMinusOne = ChunkLen-1
 
 -- Number of chunks needed to represent ruler
@@ -24,6 +24,8 @@ const HalfMarks = (NumMarks+1)/2
 
 -- Compiler options
 opt StackWidth = ChunkLen
+opt StackDepth = 1024
+opt UndoDepth  = 1024
 
 -- Program state
 var ruler  : bit(LogChunks) -> bit(ChunkLen)
@@ -33,7 +35,7 @@ var len    : bit(10)
 var r      : bit(ChunkLen)
 var d      : bit(ChunkLen)
 var insert : bit(1)
-var carry  : bit(ChunkLen)
+var carry  : bit(1)
 var i      : bit(LogChunks+1)
 var ok     : bit(1)
 
@@ -57,9 +59,9 @@ while marks /= NumMarks do
   while i /= NumChunks do
        r := ruler[i]
     || d := dist[i]
-     ; ruler[i] := (r << 1) | carry
+     ; ruler[i] := (r << 1) | (0 ++ carry)
     || if insert then dist[i] := d|r end
-     ; carry := r >> ChunkLenMinusOne
+     ; carry := msb(r)
     || i := i+1
   end
 end
