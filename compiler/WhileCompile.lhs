@@ -12,7 +12,7 @@
 > import MonadInstances
 > import Control.Monad
 > import Data.Maybe
-> import Data.Map as Map
+> import Data.Map as Map hiding ((!))
 > import Data.List as List
 > import qualified Data.Map as Map
 > import qualified Data.Set as Set
@@ -126,7 +126,7 @@ well-typed.  This function is not efficient.
 >       case d of
 >         Decl v _ P.Uninit -> d
 >         Decl v (TBit n) (P.IntInit i) -> d
->         Decl v (TArray RO _ _) (P.StrInit s) -> d
+>         Decl v (TArray _ _ _) (P.StrInit s) -> d
 >         Decl v _ _ -> typeError ("Invalid initialiser for variable " ++ v)
 >         other -> other
 
@@ -957,6 +957,13 @@ Wrapped repeated butterfly network (radix 2).
 >       | otherwise          = bfly block ++ wave firstRow (last block:rest)
 >       where (block, rest)  = splitAt (n+1) rows
 
+Auxiliaries
+===========
+
+> m ! k = case Map.lookup k m of
+>           Nothing -> error ("Undeclared identifier: " ++ show k)
+>           Just x -> x
+
 Top-level compiler
 ==================
 
@@ -975,9 +982,9 @@ Top-level compiler
 >           -- translate (wavefly 6 8)
 >           -- translate (wavefly 5 16)
 >           -- translate (torus 23 23)
->           --translate (torus 3 3)
+>           translate (torus 1 1)
 >           --translate (wavefly 4 5)
->           translate (wavefly 4 8)
+>           --translate (wavefly 4 8)
 >         . annotateLive
 >         . typeCheck
 >         . arrayAnalysis

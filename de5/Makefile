@@ -11,6 +11,11 @@ all:
 download-sof:
 	quartus_pgm -m jtag -o "p;Golden_top.sof"
 
+.PHONY: update-mif
+update-mif:
+	quartus_cdb --update_mif Golden_top.qpf
+	quartus_asm Golden_top.qpf
+
 .PHONY: clean
 clean:
 	rm -f *.mif *.rpt *.msg *.summary *.sld *.sopcinfo *.jdi
