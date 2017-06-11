@@ -578,6 +578,11 @@ Compile a statement to give a schedule.
 >          Lte -> x1 *<=* x2
 >          Gt  -> x1 *>* x2
 >          Gte -> x1 *>=* x2
+>   compExp (Cond e1 e2 e3) =
+>     do x1 <- compExp e1
+>        x2 <- compExp e2
+>        x3 <- compExp e3
+>        x1 ? (x2, x3)
 >   compExp (RamOutput r p) = return (env!(r ++ ":" ++ show p))
 >   compExp (Select from to e) =
 >     do compExp e >>= select from to
@@ -796,6 +801,7 @@ well-typed.  This function is not efficient.
 >     widthOf (RamOutput m p) = dataWidth p (env!m)
 >     widthOf (Select from to e) = Just ((from+1) - to)
 >     widthOf (Concat e1 e2) = return (+) `ap` widthOf e1 `ap` widthOf e2
+>     widthOf (Cond e1 e2 e3) = widthOf e2 `mplus` widthOf e3
 >
 >     dataWidth _ (TRam aw dw) = Just dw
 >     dataWidth A (TMWRam awA dwA awB dwB) = Just dwA
@@ -819,6 +825,10 @@ well-typed.  This function is not efficient.
 >                 Nothing -> typeErrorW (show e) w
 >                 Just w -> Apply2 op (tcExp w e1) (tcExp w e2)
 >           | not (isCmpOp op) = Apply2 op (tcExp w e1) (tcExp w e2)
+>         ch (Cond e1 e2 e3) =
+>           case widthOf e2 `mplus` widthOf e3 of
+>             Nothing -> typeErrorW (show e) w
+>             Just w -> Cond (tcExp 1 e1) (tcExp w e2) (tcExp w e3)
 >         ch (RamOutput m p)
 >           | dataWidth p (env!m) == Just w = e
 >         ch (Select from to e)
@@ -930,46 +940,6 @@ well-typed.  This function is not efficient.
 
 > ptrWidth :: Type -> Int
 > ptrWidth (TPtr n _) = n
-
-Simplification
-==============
-
-Constant folding ensures that no operations exist whose operands are
-all literals, which can help when inferring the widths of literals.
-(This code is currently not used.)
-
-> constantFolding :: Exp -> Exp
-> constantFolding = bottomup fold
->   where
->
->   fold (Apply1 op (Lit _ x)) = Lit Nothing (apply1 op x)
->   fold (Apply2 op (Lit _ x) (Lit _ y)) = Lit Nothing (apply2 op x y)
->   fold (Select from to (Lit _ x)) = Lit Nothing (sel from to x)
->   fold (Concat (Lit _ x) (Lit _ y)) = Lit Nothing (conc x y)
->   fold other = other
->
->   apply1 Inv x = complement x
->
->   apply2 And x y = x .&. y
->   apply2 Or  x y = x .|. y
->   apply2 Xor x y = x `xor` y
->   apply2 Add x y = x + y
->   apply2 Sub x y = x - y
->   apply2 Mul x y = x * y
->   apply2 Div x y = x `div` y
->   apply2 Eq  x y = integer (x == y)
->   apply2 Neq x y = integer (x /= y)
->   apply2 Lt  x y = integer (x < y)
->   apply2 Lte x y = integer (x <= y)
->   apply2 Gt  x y = integer (x > y)
->   apply2 Gte x y = integer (x >= y)
->
->   integer False = 0
->   integer True  = 1
->
->   conc x y = x `shiftL` log2ceil y
->   log2ceil n = if n == 1 then 1 else 1 + log2ceil (n `div` 2)
->   sel from to x = (x `shiftR` from) .&. (2^((to+1) - from)-1)
 
 Auxiliaries
 ===========

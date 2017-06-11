@@ -45,6 +45,7 @@ well-typed.  This function is not efficient.
 >     widthOf (Apply2 op e1 e2)
 >        | P.isCmpOp op = Just 1
 >        | otherwise    = widthOf e1 `mplus` widthOf e2
+>     widthOf (Cond e1 e2 e3) = widthOf e2 `mplus` widthOf e3
 >     widthOf (Truncate w e) = Just w
 >     widthOf (Select a b e) = Just (1+a-b)
 >     widthOf (Concat e1 e2) =
@@ -69,6 +70,10 @@ well-typed.  This function is not efficient.
 >                 Nothing -> typeErrorW (show e) w
 >                 Just w -> Apply2 op (tcExp w e1) (tcExp w e2)
 >           | not (P.isCmpOp op) = Apply2 op (tcExp w e1) (tcExp w e2)
+>         ch (Cond e1 e2 e3) =
+>             case widthOf e2 `mplus` widthOf e3 of
+>               Nothing -> typeErrorW (show e) w
+>               Just w -> Cond (tcExp 1 e1) (tcExp w e2) (tcExp w e3)
 >         ch (Truncate n e)
 >           | n == w =
 >             case widthOf e of
@@ -106,13 +111,13 @@ well-typed.  This function is not efficient.
 >     tc (Choice s1 s2 live) = Choice (tc s1) (tc s2) live
 >     tc (ArrayAssign a e1 e2) =
 >       case env!a of
->         TArray _ (TBit aw) (TBit dw) ->
+>         TArray _ _ (TBit aw) (TBit dw) ->
 >           ArrayAssign a (tcExp aw (Truncate aw e1))
 >                         (tcExp dw e2)
 >         other -> typeError ("Not an array: " ++ show a)
 >     tc (ArrayLookup m x a e) =
 >       case (env!x, env!a) of
->         (TBit w, TArray _ (TBit aw) (TBit dw)) ->
+>         (TBit w, TArray _ _ (TBit aw) (TBit dw)) ->
 >           if w == dw then ArrayLookup m x a (tcExp aw (Truncate aw e)) else
 >             typeError ("Width mismatch in lookup of array " ++ a)
 >         other -> typeError ("Expected " ++ a ++ " to be an array" ++
@@ -126,7 +131,7 @@ well-typed.  This function is not efficient.
 >       case d of
 >         Decl v _ P.Uninit -> d
 >         Decl v (TBit n) (P.IntInit i) -> d
->         Decl v (TArray _ _ _) (P.StrInit s) -> d
+>         Decl v (TArray _ _ _ _) (P.StrInit s) -> d
 >         Decl v _ _ -> typeError ("Invalid initialiser for variable " ++ v)
 >         other -> other
 
@@ -144,10 +149,10 @@ types.
 >     }
 >   where
 >     desugarType nest env (TUser id) = env!id
->     desugarType True env (TArray m t1 t2) =
+>     desugarType True env (TArray m l t1 t2) =
 >       error "Nested array types are disallowed"
->     desugarType False env (TArray m t1 t2) =
->       TArray m (desugarType True env t1) (desugarType True env t2)
+>     desugarType False env (TArray m l t1 t2) =
+>       TArray m l (desugarType True env t1) (desugarType True env t2)
 >     desugarType nest env (TBit n) = TBit n
 >
 >     mkTypeEnv env [] = env
@@ -217,9 +222,9 @@ depending on whether the array is Read-Only or Read/Write.
 >
 >     rw = Set.fromList $ rwArrays (code p)
 >
->     trDecl (Decl v (TArray _ aw dw) init)
->       | v `Set.member` rw = Decl v (TArray RW aw dw) init
->       | otherwise         = Decl v (TArray RO aw dw) init
+>     trDecl (Decl v (TArray _ l aw dw) init)
+>       | v `Set.member` rw = Decl v (TArray RW l aw dw) init
+>       | otherwise         = Decl v (TArray RO l aw dw) init
 >     trDecl d = d
 >
 >     trStm (ArrayLookup _ x a e)
@@ -557,9 +562,12 @@ barring different instances of variable names.)
 >            ++ [ P.Halt ]
 >
 >            ++ [ snd (arrayRoutines v aw dw)
->               | Decl v (TArray RW (TBit aw) (TBit dw)) init <- decls p ]
+>               | Decl v (TArray RW Live (TBit aw) (TBit dw)) init <- decls p ]
 >
->     rwArrays = [v | Decl v (TArray RW aw dw) init <- decls p]
+>     rwArrays = [v | Decl v (TArray RW Live aw dw) init <- decls p]
+>
+>     deadArrays = Set.fromList
+>       [v | Decl v (TArray RW Dead aw dw) init <- decls p]
 >
 >     arrayRoutines a aw dw = (decls, code)
 >       where
@@ -655,6 +663,7 @@ barring different instances of variable names.)
 >     trExp (Var v) = P.Var (v # i)
 >     trExp (Apply1 op e) = P.Apply1 op (trExp e)
 >     trExp (Apply2 op e1 e2) = P.Apply2 op (trExp e1) (trExp e2)
+>     trExp (Cond e1 e2 e3) = P.Cond (trExp e1) (trExp e2) (trExp e3)
 >     trExp (Truncate w e) = P.Select (w-1) 0 (trExp e)
 >     trExp (Select a b e) = P.Select a b (trExp e)
 >     trExp (Concat e1 e2) = P.Concat (trExp e1) (trExp e2)
@@ -751,26 +760,31 @@ barring different instances of variable names.)
 >     trStm (ArrayLookup RW x a e) = return $
 >       P.Fetch (a # i) P.A (trExp e) P.:> P.Tick P.:>
 >       ((x # i) P.:= P.RamOutput (a # i) P.A) P.:> P.Tick
->     trStm (ArrayAssign a e1 e2) = return $
->            P.Store (a # i) P.A (trExp e1) (trExp e2)
->       P.:> P.Fetch (a # i) P.B (trExp e1)
->       P.:> (("_" ++ (a # i) ++ "_save_index") P.:= trExp e1)
->       P.:> (("_" ++ (a # i) ++ "_save_marker") P.:= P.Lit (Just 1) 0)
->       P.:> P.Tick
->       P.:> P.ForkJump ("_" ++ (a # i) ++ "_save")
+>     trStm (ArrayAssign a e1 e2)
+>       | a `Set.member` deadArrays = return $
+>              P.Store (a # i) P.A (trExp e1) (trExp e2)
+>         P.:> P.Fetch (a # i) P.B (trExp e1)
+>         P.:> P.Tick
+>       | otherwise = return $
+>              P.Store (a # i) P.A (trExp e1) (trExp e2)
+>         P.:> P.Fetch (a # i) P.B (trExp e1)
+>         P.:> (("_" ++ (a # i) ++ "_save_index") P.:= trExp e1)
+>         P.:> (("_" ++ (a # i) ++ "_save_marker") P.:= P.Lit (Just 1) 0)
+>         P.:> P.Tick
+>         P.:> P.ForkJump ("_" ++ (a # i) ++ "_save")
 >
 >     trDecls :: [Decl] -> [P.Decl]
 >     trDecls ds =
 >         [P.Decl (v # i) (P.TReg n) init | Decl v (TBit n) init <- ds]
 >      ++ [P.Decl (v # i) (P.TRam aw dw) init
->         | Decl v (TArray RW (TBit aw) (TBit dw)) init <- ds]
+>         | Decl v (TArray RW _ (TBit aw) (TBit dw)) init <- ds]
 >      ++ [P.Decl ("_stack" # i) (P.TRam stackDepth stackWidth) P.Uninit]
 >      ++ [P.Decl ("_ret" # i) (P.TLab []) P.Uninit]
 >      ++ [P.Decl ("_emit" # i) (P.TReg 1) P.Uninit]
 >      ++ [P.Decl ("_token" # i) (P.TReg (length neighbours)) P.Uninit
 >         | length neighbours > 0]
 >      ++ concat [ fst (arrayRoutines v aw dw)
->                | Decl v (TArray RW (TBit aw) (TBit dw)) init <- ds ]
+>                | Decl v (TArray RW Live (TBit aw) (TBit dw)) init <- ds ]
 >
 >     par [] = P.Skip
 >     par ss = P.Par ss
@@ -870,7 +884,7 @@ of nodes.)
 >       ++ [ P.Decl ("_done" # i) (P.TReg 1) P.Uninit | i <- [0..n] ]
 >       ++ concatMap P.decls ps
 >       ++ [ P.Decl v (P.TRom aw dw) init
->          | Decl v (TArray RO (TBit aw) (TBit dw)) init <- decls p]
+>          | Decl v (TArray RO _ (TBit aw) (TBit dw)) init <- decls p]
 
 > (#) :: String -> Int -> String
 > v # i = v ++ "[" ++ show i ++ "]"
@@ -982,7 +996,7 @@ Top-level compiler
 >           -- translate (wavefly 6 8)
 >           -- translate (wavefly 5 16)
 >           -- translate (torus 23 23)
->           translate (torus 1 1)
+>           translate (torus 3 3)
 >           --translate (wavefly 4 5)
 >           --translate (wavefly 4 8)
 >         . annotateLive

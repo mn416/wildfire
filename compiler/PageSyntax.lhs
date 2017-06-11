@@ -1,5 +1,5 @@
-An Intermediate Language for Hardware Compilation
-=================================================
+Syntax of intermediate language
+===============================
 
 Named after Ian Page who (along with Wayne Luk) first showed how to
 compile Occam to hardware.
@@ -104,6 +104,7 @@ Expressions (arithmetic & conditions).
 >   | Select Int Int Exp        {- Bit selection -}
 >   | Concat Exp Exp            {- Bit-string concatenation -}
 >   | Available [Id]            {- Are all locks in set available? -}
+>   | Cond Exp Exp Exp          {- Conditional expression -}
 >     deriving Show
 
 > data UnaryOp =
@@ -140,6 +141,7 @@ Traversals
 > instance Descend Exp where
 >   descendM f (Apply1 op e) = return (Apply1 op) `ap` f e
 >   descendM f (Apply2 op e1 e2) = return (Apply2 op) `ap` f e1 `ap` f e2
+>   descendM f (Cond e1 e2 e3) = return Cond `ap` f e1 `ap` f e2 `ap` f e3
 >   descendM f (Select from to e) = return (Select from to) `ap` f e
 >   descendM f (Concat e1 e2) = return Concat `ap` f e1 `ap` f e2
 >   descendM f other = return other

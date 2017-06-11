@@ -20,7 +20,7 @@ page = T.makeTokenParser $ emptyDef
   , opStart          = opLetter haskellStyle
   , opLetter         = oneOf "+-*/=<>;:|@.^~?"
   , reservedNames    = ["skip", "if", "then", "else", "end",
-                        "while", "declare", "in", "fail",
+                        "while", "declare", "in", "fail", "cond",
                         "opt", "var", "const", "msb", "bit",
                         "log", "type", "enum", "rec", "struct"]
   , caseSensitive    = True
@@ -92,6 +92,11 @@ constEval env e =
           Gt  -> if i >  j then 1 else 0
           Gte -> if i >= j then 1 else 0
           _   -> error "Invalid 'const' expression"
+    Cond e1 e2 e3 ->
+      let i = constEval env e1
+          j = constEval env e2
+          k = constEval env e3 in
+        if i == 0 then k else j
   where
     m ! k  = Map.findWithDefault (err k) k env
     err k  = error ("In 'const' expression, unbound variable: " ++ show k)
@@ -166,6 +171,9 @@ expr' env =
         pure (Lit Nothing) <*> natural
     <|> pure (Apply1 MSB) <*> (reserved "msb" *> parens (expr env))
     <|> pure (Apply1 Log) <*> (reserved "log" *> parens (expr env))
+    <|> pure Cond <*> (reserved "cond" *> reservedOp "(" *> expr env)
+                  <*> (reservedOp "," *> expr env)
+                  <*> (reservedOp "," *> expr env <* reservedOp ")")
     <|> do {
           v <- dottedIdentifier ;
           case Map.lookup v env of
@@ -244,10 +252,14 @@ bitType env = do
 typ :: ConstMap -> Parser Type
 typ env = 
   do t1 <- baseType
-     m <- optionMaybe (reservedOp "->" *> baseType)
+     m <- optionMaybe $ do
+            live <- (reservedOp "->" *> pure Live) <|>
+                    (reservedOp "=>" *> pure Dead)
+            t    <- baseType
+            return (live, t)
      case m of 
        Nothing -> return t1
-       Just t2 -> return (TArray RW t1 t2)
+       Just (live, t2) -> return (TArray RW live t1 t2)
   where
     baseType =
       do o <- optionMaybe (bitType env)

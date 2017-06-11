@@ -89,6 +89,12 @@ Expressions
 >   where
 >     a = eval env e1
 >     b = eval env e2
+> eval env (Cond e1 e2 e3) =
+>   if val a == 0 then c else b
+>   where
+>     a = eval env e1
+>     b = eval env e2
+>     c = eval env e3
 > eval env (Truncate w e) =
 >   bitStr (val $ eval env e) w
 > eval env (Concat e1 e2) =
@@ -137,10 +143,10 @@ Programs
 >       initState (Map.insert (declId d) (IntVal (bitStr 0 w)) env) ds
 >     (TBit w, P.IntInit n) ->
 >       initState (Map.insert (declId d) (IntVal (bitStr n w)) env) ds
->     (TArray _ (TBit aw) (TBit dw), P.Uninit) -> do
+>     (TArray _ _ (TBit aw) (TBit dw), P.Uninit) -> do
 >       let z = Map.fromList [(bitStr a aw, bitStr 0 dw) | a <- [0..(2^aw)-1]]
 >       initState (Map.insert (declId d) (ArrayVal z) env) ds
->     (TArray _ (TBit aw) (TBit dw), P.StrInit filename) -> do
+>     (TArray _ _ (TBit aw) (TBit dw), P.StrInit filename) -> do
 >       let z = Map.fromList [(bitStr a aw, bitStr 0 dw) | a <- [0..(2^aw)-1]]
 >       mif <- readMIF filename
 >       let m = Map.fromList [ (bitStr a aw, bitStr d dw)

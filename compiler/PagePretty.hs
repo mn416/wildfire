@@ -95,6 +95,10 @@ prettyExp (Apply1 (Shr n) e1) =
   parens (prettyExp e1 <+> text ">>" <+> text (show n))
 prettyExp (Apply1 f e1) = parens (op1 f <+> prettyExp e1)
 prettyExp (Apply2 f e1 e2) = parens (prettyExp e1 <+> op2 f <+> prettyExp e2)
+prettyExp (Cond e1 e2 e3) = text "cond" <>
+  parens (prettyExp e1 <> text "," <+>
+          prettyExp e2 <> text "," <+>
+          prettyExp e3)
 prettyExp (RamOutput v A) = text ("data(" ++ v ++ ":A)")
 prettyExp (RamOutput v B) = text ("data(" ++ v ++ ":B)")
 prettyExp (Select i j e) =

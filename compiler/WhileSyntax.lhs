@@ -1,5 +1,5 @@
-Hardware Compilation of the While Language
-==========================================
+Syntax of source language
+=========================
 
 > module WhileSyntax where
 
@@ -31,14 +31,18 @@ A declaration associates an identifier with a type.
 > type Id = String
 
 > data Type =
->     TBit Width                 {- Register with width -}
->   | TArray ArrayMode Type Type {- Array with address and data types -}
->   | TUser Id                   {- User-defined type -}
+>     TBit Width             {- Register with width -}
+>   | TArray ArrayMode
+>       ArrayLive Type Type  {- Array with address and data types -}
+>   | TUser Id               {- User-defined type -}
 >     deriving (Eq, Show)
 
 > type Width = Int
 
-> data ArrayMode = RO | RW      {- Read-Only and Read/Write arrays -}
+> data ArrayMode = RO | RW   {- Read-Only and Read/Write arrays -}
+>   deriving (Eq, Show)
+
+> data ArrayLive = Live | Dead  {- Array live at choice? -}
 >   deriving (Eq, Show)
 
 > type CompilerOpts = Map.Map String Integer
@@ -75,6 +79,7 @@ Expressions (arithmetic & conditions).
 >   | Truncate Int Exp          {- Truncate to given width -}
 >   | Select Int Int Exp        {- Bit vector slice -}
 >   | Concat Exp Exp            {- Bit vector concatenation -}
+>   | Cond Exp Exp Exp          {- Conditional expression -}
 >     deriving Show
 
 Type declarations
@@ -100,6 +105,7 @@ Traversals
 > instance Descend Exp where
 >   descendM f (Apply1 op e) = return (Apply1 op) `ap` f e
 >   descendM f (Apply2 op e1 e2) = return (Apply2 op) `ap` f e1 `ap` f e2
+>   descendM f (Cond e1 e2 e3) = return Cond `ap` f e1 `ap` f e2 `ap` f e3
 >   descendM f (Truncate w e) = return (Truncate w) `ap` f e
 >   descendM f (Select a b e) = return (Select a b) `ap` f e
 >   descendM f (Concat e1 e2) = return Concat `ap` f e1 `ap` f e2

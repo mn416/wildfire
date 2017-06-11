@@ -22,7 +22,8 @@ page = T.makeTokenParser $ emptyDef
                         "inv", "declare", "in", "reg", "label", "fork",
                         "lock", "of", "fetch", "ram", "from", "to",
                         "data", "push", "pop", "top", "bits",
-                        "end", "do", "return", "load", "rom", "opt"
+                        "end", "do", "return", "load", "rom", "opt",
+                        "cond"
                        ]
   , caseSensitive    = True
   }
@@ -75,6 +76,9 @@ expr' = pure (Lit Nothing) <*> natural
     <|> pure Select <*> (reserved "bits" *> nat)
                     <*> (reserved "to" *> nat)
                     <*> (reserved "of" *> expr)
+    <|> pure Cond <*> (reserved "cond" *> reservedOp "(" *> expr)
+                  <*> (reservedOp "," *> expr)
+                  <*> (reservedOp "," *> expr <* reservedOp ")")
     <|> parens expr
 
 var :: Parser Id
