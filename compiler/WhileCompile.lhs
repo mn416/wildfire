@@ -763,7 +763,6 @@ barring different instances of variable names.)
 >     trStm (ArrayAssign a e1 e2)
 >       | a `Set.member` deadArrays = return $
 >              P.Store (a # i) P.A (trExp e1) (trExp e2)
->         P.:> P.Fetch (a # i) P.B (trExp e1)
 >         P.:> P.Tick
 >       | otherwise = return $
 >              P.Store (a # i) P.A (trExp e1) (trExp e2)
