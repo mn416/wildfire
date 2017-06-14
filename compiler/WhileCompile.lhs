@@ -417,7 +417,7 @@ thread i are as follows.
 
   array(i)_save:
     array(i)_undo:A[array(i)_sp] :=
-      { array(i)_save_index, data(array(i):B), array(i)_save_marker } ;
+      { array(i)_save_index, data(array(i):A), array(i)_save_marker } ;
     array(i)_sp := array(i)_sp+1 ;
     halt
 
@@ -520,6 +520,29 @@ according to static restriction (1).
 >       where vs = nub (concat [live (s2 :> k) [] | k <- ks])
 >     ann other ks = other
 
+Wide copy
+=========
+
+Each RW array is implemented using a dual-port RAM, with port B used
+to copy contents from one processor to another during a
+non-deterministic choice.  The widths of each port need not be the
+same -- a wider port B can reduce the overhead of copying.  The
+following function takes the width and depth of port A and returns a
+width and depth for port B.
+
+> portBWidth :: (Width, Width) -> (Width, Width)
+> portBWidth (aw, dw)
+>   | aw2 > 0   = (aw2, dw2)
+>   | otherwise = (aw, dw)
+>   where
+>     (aw2, dw2) = case dw of
+>                    0 -> (aw, dw)
+>                    1 -> (aw-4, 16)
+>                    2 -> (aw-3, 16)
+>                    _ | dw <= 5 -> (aw-2, dw*4)
+>                    _ | dw <= 10 -> (aw-1, dw*2)
+>                    _ -> (aw, dw)
+
 Translation to target code
 ==========================
 
@@ -571,11 +594,13 @@ barring different instances of variable names.)
 >
 >     arrayRoutines a aw dw = (decls, code)
 >       where
+>         (awb, dwb) = portBWidth (aw, dw)
+>
 >         code = P.block $ 
 >                [ P.Label save ]
 >             ++ [ P.Store undo P.A (P.Var sp)
 >                          (P.Var saveIndex  `P.Concat`
->                            P.RamOutput (a # i) P.B `P.Concat`
+>                            P.RamOutput (a # i) P.A `P.Concat`
 >                              P.Var saveMarker) ]
 >             ++ [ sp P.:= P.Apply2 P.Add (P.Var sp) (P.Lit Nothing 1) ]
 >             ++ [ P.Halt ]
@@ -586,10 +611,10 @@ barring different instances of variable names.)
 >             ++ [ P.Fetch (a # i) P.B (P.Lit Nothing 0) ]
 >             ++ [ P.Tick ]
 >             ++ [ P.While (P.Apply2 P.Neq (P.Var iter) iterMax) $
->                         (writeAddr P.:= P.Select (aw-1) 0 (P.Var iter))
+>                         (writeAddr P.:= P.Select (awb-1) 0 (P.Var iter))
 >                    P.:> (writeVal  P.:= P.RamOutput (a # i) P.B)
 >                    P.:> (P.ForkJump write)
->                    P.:> (P.Fetch (a # i) P.B (P.Select (aw-1) 0
+>                    P.:> (P.Fetch (a # i) P.B (P.Select (awb-1) 0
 >                            (P.Apply2 P.Add (P.Var iter)
 >                                            (P.Lit Nothing 1))))
 >                    P.:> (iter P.:= P.Apply2 P.Add (P.Var iter)
@@ -630,10 +655,11 @@ barring different instances of variable names.)
 >           , P.Decl sp (P.TReg undoDepth) (P.IntInit 0)
 >           , P.Decl saveIndex (P.TReg aw) P.Uninit
 >           , P.Decl saveMarker (P.TReg 1) P.Uninit
->           , P.Decl iter (P.TReg (aw+1)) P.Uninit
+>           , P.Decl newData (P.TReg dw) P.Uninit
+>           , P.Decl iter (P.TReg (awb+1)) P.Uninit
 >           , P.Decl done (P.TReg 1) P.Uninit
->           , P.Decl writeAddr (P.TReg aw) P.Uninit
->           , P.Decl writeVal (P.TReg dw) P.Uninit
+>           , P.Decl writeAddr (P.TReg awb) P.Uninit
+>           , P.Decl writeVal (P.TReg dwb) P.Uninit
 >           , P.Decl restored (P.TReg 1) P.Uninit
 >           ]
 >
@@ -642,9 +668,10 @@ barring different instances of variable names.)
 >         sp          = "_" ++ (a # i) ++ "_sptr"
 >         saveIndex   = "_" ++ (a # i) ++ "_save_index"
 >         saveMarker  = "_" ++ (a # i) ++ "_save_marker"
+>         newData     = "_" ++ (a # i) ++ "_new_data"
 >         copy        = "_" ++ (a # i) ++ "_copy"
 >         iter        = "_" ++ (a # i) ++ "_copy_iter"
->         iterMax     = P.Lit Nothing (2 ^ aw)
+>         iterMax     = P.Lit Nothing (2 ^ awb)
 >         done        = "_" ++ (a # i) ++ "_copy_done"
 >         writeAddr   = "_" ++ (a # i) ++ "_write_addr"
 >         writeVal    = "_" ++ (a # i) ++ "_write_val"
@@ -764,19 +791,27 @@ barring different instances of variable names.)
 >       | a `Set.member` deadArrays = return $
 >              P.Store (a # i) P.A (trExp e1) (trExp e2)
 >         P.:> P.Tick
->       | otherwise = return $
->              P.Store (a # i) P.A (trExp e1) (trExp e2)
->         P.:> P.Fetch (a # i) P.B (trExp e1)
->         P.:> (("_" ++ (a # i) ++ "_save_index") P.:= trExp e1)
->         P.:> (("_" ++ (a # i) ++ "_save_marker") P.:= P.Lit (Just 1) 0)
+>       | otherwise = let saveIndex  = ("_" ++ (a # i) ++ "_save_index")
+>                         saveMarker = ("_" ++ (a # i) ++ "_save_marker")
+>                         newData    = ("_" ++ (a # i) ++ "_new_data") in
+>         return $
+>              P.Fetch (a # i) P.A (trExp e1)
+>         P.:> (saveIndex P.:= trExp e1)
+>         P.:> (saveMarker P.:= P.Lit (Just 1) 0)
+>         P.:> (newData P.:= trExp e2)
 >         P.:> P.Tick
+>         P.:> P.Store (a # i) P.A (P.Var saveIndex) (P.Var newData)
 >         P.:> P.ForkJump ("_" ++ (a # i) ++ "_save")
+>         P.:> P.Tick
 >
 >     trDecls :: [Decl] -> [P.Decl]
 >     trDecls ds =
 >         [P.Decl (v # i) (P.TReg n) init | Decl v (TBit n) init <- ds]
 >      ++ [P.Decl (v # i) (P.TRam aw dw) init
->         | Decl v (TArray RW _ (TBit aw) (TBit dw)) init <- ds]
+>         | Decl v (TArray RW Dead (TBit aw) (TBit dw)) init <- ds]
+>      ++ [let (awb, dwb) = portBWidth (aw, dw) in
+>            P.Decl (v # i) (P.TMWRam aw dw awb dwb) init
+>         | Decl v (TArray RW Live (TBit aw) (TBit dw)) init <- ds]
 >      ++ [P.Decl ("_stack" # i) (P.TRam stackDepth stackWidth) P.Uninit]
 >      ++ [P.Decl ("_ret" # i) (P.TLab []) P.Uninit]
 >      ++ [P.Decl ("_emit" # i) (P.TReg 1) P.Uninit]
@@ -995,9 +1030,9 @@ Top-level compiler
 >           -- translate (wavefly 6 8)
 >           -- translate (wavefly 5 16)
 >           -- translate (torus 23 23)
->           translate (torus 3 3)
 >           --translate (wavefly 4 5)
->           --translate (wavefly 4 8)
+>           --translate (wavefly 5 8)
+>           translate (torus 3 3)
 >         . annotateLive
 >         . typeCheck
 >         . arrayAnalysis

@@ -72,7 +72,10 @@ for line in f:
   for word in line.split():
     v = int(word)
     lits.append(v)
-    variables[abs(v)] = 1
+    if abs(v) in variables:
+      variables[abs(v)] = variables[abs(v)]+1
+    else:
+      variables[abs(v)] = 1
 
 # =============================================================================
 # MIF generator
