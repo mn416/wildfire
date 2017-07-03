@@ -22,7 +22,7 @@ var stack  : StackIndex => Lit
 
 -- Registers
 var done   : bit(1)
-var break  : bit(1)
+var found  : bit(1)
 var lit    : Lit
 var val    : Value
 var i      : LitId
@@ -40,15 +40,15 @@ var nextj  : LitId
 -- Solver
 while ~done do
   -- Find the next unassigned variable
-  break := 0 ;
-  while ~break & ~done do
+  found := 0 ;
+  while ~found & ~done do
     lit := lits[i] ;
     val := vars[lit.id] ;
     done := lit.finalLit ||
-    if val == Undef then break := 1 else i := i+1 end
+    if val == Undef then found := 1 else i := i+1 end
   end ;
 
-  if ~done then
+  if found then
     val := Zero ? val := One ;
 
     -- Assign variable and push literal to stack
