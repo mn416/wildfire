@@ -1031,8 +1031,8 @@ Top-level compiler
 >           -- translate (wavefly 5 16)
 >           -- translate (torus 23 23)
 >           --translate (wavefly 4 5)
->           --translate (wavefly 5 8)
->           translate (torus 3 3)
+>           translate (wavefly 5 8)
+>           --translate (torus 3 3)
 >         . annotateLive
 >         . typeCheck
 >         . arrayAnalysis

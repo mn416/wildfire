@@ -3,11 +3,16 @@
 const LogMaxVars    = 9
 const LogMaxLits    = 12
 const LogStackDepth = 10
+const LogMaxOccs    = 4
+
+-- Inferred constants
+const MaxVars = 1 << LogMaxVars
 
 -- Types
 type VarId      = bit(LogMaxVars)
 type LitId      = bit(LogMaxLits)
 type StackIndex = bit(LogStackDepth)
+type OccCount   = bit(LogMaxOccs)
 enum Value      = Undef | Zero | One
 rec  Lit        = { neg         : bit(1)
                   , id          : VarId
@@ -16,44 +21,75 @@ rec  Lit        = { neg         : bit(1)
                   , finalLit    : bit(1) }
 
 -- Arrays
-var lits   : LitId      -> Lit    =   "lits.mif"
-var vars   : VarId      -> Value
-var stack  : StackIndex => Lit 
+var lits  : LitId      -> Lit    =   "lits.mif"
+var vars  : VarId      -> Value
+var stack : StackIndex => Lit 
+var freq  : VarId      => OccCount
 
 -- Registers
-var done   : bit(1)
-var found  : bit(1)
-var lit    : Lit
-var val    : Value
-var i      : LitId
-var j      : LitId
-var k      : LitId
-var sp     : StackIndex
-var root   : Lit
-var iter   : bit(1)
-var last   : bit(1)
-var sat    : bit(1)
-var undef  : bit(2)
-var unit   : Lit
-var nextj  : LitId
+var done      : bit(1)
+var stop      : bit(1)
+var update    : bit(1)
+var lit       : Lit
+var branchLit : Lit
+var val       : Value
+var i         : LitId
+var j         : LitId
+var k         : LitId
+var sp        : StackIndex
+var root      : Lit
+var iter      : bit(1)
+var last      : bit(1)
+var sat       : bit(1)
+var undef     : bit(2)
+var unit      : Lit
+var nextj     : LitId
+var v         : bit(LogMaxVars+1)
+var occs      : OccCount
+var maxOccs   : OccCount
 
 -- Solver
 while ~done do
-  -- Find the next unassigned variable
-  found := 0 ;
-  while ~found & ~done do
-    lit := lits[i] ;
-    val := vars[lit.id] ;
-    done := lit.finalLit ||
-    if val == Undef then found := 1 else i := i+1 end
+  -- Initialise frequency table
+  v := 0 ;
+  while v /= MaxVars do freq[v] := 0 ; v := v+1 end ;
+
+  -- Find the most frequently occurring unassigned variable
+  i := 0 || j := 0 || sat := 0 || update := 0 || stop := 0 || maxOccs := 0 ;
+  while ~stop do
+    lit  := lits[i] ;
+    val  := vars[lit.id] ||
+    occs := freq[lit.id] ;
+    i    := i+1 ||
+    occs := occs+1 ||
+    stop := lit.finalLit ||
+    if (val == One) & ~lit.neg |
+       (val == Zero) & lit.neg then sat := 1 end ;
+    if update then
+      if val == Undef then
+         freq[lit.id] := occs ||
+         if occs >= maxOccs then maxOccs := occs || branchLit := lit end
+      end
+    end ;
+    if lit.endOfClause then
+      if ~update & ~sat then
+        update := 1 || i := j || stop := 0
+      else
+        update := 0 || j := i
+      end ;
+      sat := 0
+    end
   end ;
 
-  if found then
+  -- Make new assignment
+  if maxOccs == 0 then
+    done := 1 
+  else
     val := Zero ? val := One ;
 
     -- Assign variable and push literal to stack
-    vars[lit.id] := val ||
-    stack[0] := lit ||
+    vars[branchLit.id] := val ||
+    stack[0] := branchLit ||
     sp := 1 ;
 
     while sp /= 0 do

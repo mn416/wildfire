@@ -15,6 +15,7 @@ import sets
 LogMaxVars    = 9
 LogMaxLits    = 12
 LogStackDepth = 10
+LogMaxOccs    = 4
 
 # =============================================================================
 # Misc functions
@@ -84,6 +85,11 @@ for line in f:
 # Check number of variables
 if len(variables) >= 2**LogMaxVars:
   abort("Max variables exceeded")
+
+# Check occurrence count
+for v in variables:
+  if v != 0 and variables[v] >= 2**LogMaxOccs:
+    abort("Max occurence count exceeded")
 
 # Split into clauses
 clauses = []
