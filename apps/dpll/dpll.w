@@ -9,7 +9,6 @@ const LogMaxClauseLen = 5
 type VarId      = bit(LogMaxVars)
 type LitId      = bit(LogMaxLits)
 type StackIndex = bit(LogStackDepth)
-type OccCount   = bit(LogMaxOccs)
 enum Value      = Undef | Zero | One
 rec  Lit        = { neg         : bit(1)
                   , id          : VarId
@@ -24,7 +23,7 @@ var stack : StackIndex => Lit
 
 -- Registers
 var done      : bit(1)
-var stop      : bit(1)
+var found     : bit(1)
 var lit       : Lit
 var branchLit : Lit
 var val       : Value
@@ -46,19 +45,19 @@ var size      : bit(LogMaxClauseLen+1)
 -- Solver
 while ~done do
   -- Pick a literal occuring in a clause of minimum size
-  i := 0 || sat := 0 || stop := 0 || size := 0 || smallest := ~0 ;
-  while ~stop do
-    lit  := lits[i] ;
-    val  := vars[lit.id] ;
-    i    := i+1 ||
-    stop := lit.finalLit ||
+  i := 0 || sat := 0 || found := 0 || size := 0 || smallest := ~0 ;
+  while ~found do
+    lit   := lits[i] ;
+    val   := vars[lit.id] ;
+    i     := i+1 ||
+    found := lit.finalLit ||
     if (val == One) & ~lit.neg |
        (val == Zero) & lit.neg then sat := 1 end ||
     if val == Undef then undefLit := lit || size := size + 1 end ;
     if lit.endOfClause then
       if ~sat & (size < smallest) then
         smallest := size || branchLit := undefLit ||
-        if size == 2 then stop := 1 end
+        if size == 2 then found := 1 end
       end ;
       sat := 0 || size := 0
     end
