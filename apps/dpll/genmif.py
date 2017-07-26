@@ -12,10 +12,10 @@ import sets
 # Parameters
 # =============================================================================
 
-LogMaxVars    = 9
-LogMaxLits    = 12
-LogStackDepth = 10
-LogMaxOccs    = 4
+LogMaxVars      = 9
+LogMaxLits      = 12
+LogStackDepth   = 10
+LogMaxClauseLen = 5
 
 # =============================================================================
 # Misc functions
@@ -86,11 +86,6 @@ for line in f:
 if len(variables) >= 2**LogMaxVars:
   abort("Max variables exceeded")
 
-# Check occurrence count
-for v in variables:
-  if v != 0 and variables[v] >= 2**LogMaxOccs:
-    abort("Max occurence count exceeded")
-
 # Split into clauses
 clauses = []
 while True:
@@ -99,6 +94,11 @@ while True:
   clauses.append(lits[0:n])
   lits = lits[n+1:]
 numClauses = len(clauses)
+
+# Check clause sizes
+for cs in clauses:
+  if len(cs) >= 2**LogMaxClauseLen:
+    abort("Max clause length exceeded")
 
 # Check number of literals
 lits = [lit for clause in clauses for lit in clause]

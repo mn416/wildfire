@@ -1,12 +1,9 @@
 -- SAT Solver using DPLL algorithm
 
-const LogMaxVars    = 9
-const LogMaxLits    = 12
-const LogStackDepth = 10
-const LogMaxOccs    = 4
-
--- Inferred constants
-const MaxVars = 1 << LogMaxVars
+const LogMaxVars      = 9
+const LogMaxLits      = 12
+const LogStackDepth   = 10
+const LogMaxClauseLen = 5
 
 -- Types
 type VarId      = bit(LogMaxVars)
@@ -24,12 +21,10 @@ rec  Lit        = { neg         : bit(1)
 var lits  : LitId      -> Lit    =   "lits.mif"
 var vars  : VarId      -> Value
 var stack : StackIndex => Lit 
-var freq  : VarId      => OccCount
 
 -- Registers
 var done      : bit(1)
 var stop      : bit(1)
-var update    : bit(1)
 var lit       : Lit
 var branchLit : Lit
 var val       : Value
@@ -42,47 +37,35 @@ var iter      : bit(1)
 var last      : bit(1)
 var sat       : bit(1)
 var undef     : bit(2)
+var undefLit  : Lit
 var unit      : Lit
 var nextj     : LitId
-var v         : bit(LogMaxVars+1)
-var occs      : OccCount
-var maxOccs   : OccCount
+var smallest  : bit(LogMaxClauseLen+1)
+var size      : bit(LogMaxClauseLen+1)
 
 -- Solver
 while ~done do
-  -- Initialise frequency table
-  v := 0 ;
-  while v /= MaxVars do freq[v] := 0 ; v := v+1 end ;
-
-  -- Find the most frequently occurring unassigned variable
-  i := 0 || j := 0 || sat := 0 || update := 0 || stop := 0 || maxOccs := 0 ;
+  -- Pick a literal occuring in a clause of minimum size
+  i := 0 || sat := 0 || stop := 0 || size := 0 || smallest := ~0 ;
   while ~stop do
     lit  := lits[i] ;
-    val  := vars[lit.id] ||
-    occs := freq[lit.id] ;
+    val  := vars[lit.id] ;
     i    := i+1 ||
-    occs := occs+1 ||
     stop := lit.finalLit ||
     if (val == One) & ~lit.neg |
-       (val == Zero) & lit.neg then sat := 1 end ;
-    if update then
-      if val == Undef then
-         freq[lit.id] := occs ||
-         if occs >= maxOccs then maxOccs := occs || branchLit := lit end
-      end
-    end ;
+       (val == Zero) & lit.neg then sat := 1 end ||
+    if val == Undef then undefLit := lit || size := size + 1 end ;
     if lit.endOfClause then
-      if ~update & ~sat then
-        update := 1 || i := j || stop := 0
-      else
-        update := 0 || j := i
+      if ~sat & (size < smallest) then
+        smallest := size || branchLit := undefLit ||
+        if size == 2 then stop := 1 end
       end ;
-      sat := 0
+      sat := 0 || size := 0
     end
   end ;
 
   -- Make new assignment
-  if maxOccs == 0 then
+  if smallest == ~0 then
     done := 1 
   else
     val := Zero ? val := One ;
