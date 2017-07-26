@@ -6,23 +6,29 @@ wildfire program that solves the
 [N-Queens](https://en.wikipedia.org/wiki/Eight_queens_puzzle) problem:
 
 ```ada
--- Set the widths to N to solve N-Queens
-var poss : 8  -- Possible positions of queen on current row
-var l    : 8  -- Squares attacked on current row due to left-diagonal
-var r    : 8  -- " due to right-diagonal
-var d    : 8  -- " due to column
-var bit  : 8  -- Choice of queen position on current row
+-- Number of queens
+const N = 8
+
+-- Program state
+var poss : bit(N)  -- Possible positions of queen on current row
+var l    : bit(N)  -- Squares attacked on current row due to left-diagonal
+var r    : bit(N)  -- ... due to right-diagonal
+var d    : bit(N)  -- ... due to column
+var hot  : bit(N)  -- Choice of queen position on current row
 
 poss := ~0 ;
 while poss /= 0 do
-  bit := poss & (~poss + 1) ;
-     ( l := (l|bit) << 1
-    || r := (r|bit) >> 1
-    || d := d|bit
+  -- Isolate first hot bit in poss
+  hot := poss & (~poss + 1) ;
+  -- Either place a queen here or not
+     ( l := (l|hot) << 1
+    || r := (r|hot) >> 1
+    || d := d|hot
      ; poss := ~(l|r|d) )
-  ?  ( poss := poss & ~bit )
+  ?  ( poss := poss & ~hot )
 end ;
-if d == ~0 then halt else fail end
+-- Fail unless every column has a queen
+if d /= ~0 then fail end
 ```
 
 The source language supports sequential composition (`;`), parallel
@@ -45,22 +51,23 @@ pushed onto *p*'s stack. Processor *p* executes *s1* and then, after
 backtracking, *s2*.
 
 There are two properties of the implementation that make this
-efficient:
+efficient: (1) determining an idle neighbour is a single-cycle
+operation; (2) copying a processor's state to a neighbouring processor
+is optimised.
 
-A. Determining an idle neighbour is a single-cycle operation.
+The language supports arrays as well as register variables.  Arrays
+are implemented using on-chip block RAMs.  This means they tend to be
+small, and hence quick to copy.  Read-only arrays are implemented as
+block RAMs that are shared between any number of processors (the
+number can be changed using a compiler option) -- they can quite a bit
+larger than read-write arrays and they don't need to be copied during
+spawning.
 
-B. Copying a processor's state to a neighbouring processor is also a
-single-cycle operation.
+So far there are three wildfire applications:
 
-A corollary of (A) and (B) is that spawning work is always cheaper
-than executing it sequentially.  (Pushing state onto the stack is a
-multicycle operation.)  This means the program scales well to large
-numbers of processors.
-
-The language provides register variables only.  Block RAM variables
-(arrays) would extend the range of problems that can be expressed,
-e.g. SAT.  Of course, it would then be difficult to preserve property
-(B).
+  * [N-Queens solver](apps/queens/queens.w)
+  * [Golomb ruler solver](apps/golomb/golomb.w)
+  * [SAT solver](apps/dpll/dpll.w)
 
 Here are the results for an 18-Queens solver on a DE5-NET FPGA:
 
