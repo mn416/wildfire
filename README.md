@@ -66,7 +66,7 @@ spawning.
 So far there are three wildfire applications:
 
   * [N-Queens solver](apps/queens/queens.w)
-  * [Golomb ruler solver](apps/golomb/golomb.w)
+  * [Golomb ruler solver](apps/golomb/golomb2.w)
   * [SAT solver](apps/dpll/dpll.w)
 
 Here are the results for an 18-Queens solver on a DE5-NET FPGA:
