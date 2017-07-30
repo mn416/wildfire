@@ -514,7 +514,7 @@ according to static restriction (1).
 >     ann (s1 :> s2) ks =
 >       ann s1 [s2 :> k | k <- ks] :> ann s2 ks
 >     ann (Ifte e s1 s2) ks = Ifte e (ann s1 ks) (ann s2 ks)
->     ann (While e s) ks = While e (ann s (s:ks))
+>     ann (While e s) ks = While e (ann s (While e s:ks))
 >     ann (Choice s1 s2 _) ks =
 >       Choice (ann s1 ks) (ann s2 ks) vs
 >       where vs = nub (concat [live (s2 :> k) [] | k <- ks])

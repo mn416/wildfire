@@ -1,4 +1,5 @@
--- SAT Solver using DPLL algorithm
+-- Basic SAT Solver (Version 3)
+-- Unit propagation only inspects clauses that have changed
 
 const LogMaxVars      = 9
 const LogMaxLits      = 12
@@ -8,6 +9,7 @@ const LogMaxClauseLen = 5
 -- Types
 type VarId      = bit(LogMaxVars)
 type LitId      = bit(LogMaxLits)
+type ClauseLen  = bit(LogMaxClauseLen+1)
 type StackIndex = bit(LogStackDepth)
 enum Value      = Undef | Zero | One
 rec  Lit        = { neg         : bit(1)
@@ -39,8 +41,8 @@ var undef     : bit(2)
 var undefLit  : Lit
 var unit      : Lit
 var nextj     : LitId
-var smallest  : bit(LogMaxClauseLen+1)
-var size      : bit(LogMaxClauseLen+1)
+var smallest  : ClauseLen
+var size      : ClauseLen
 
 -- Solver
 while ~done do

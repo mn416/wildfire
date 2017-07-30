@@ -59,15 +59,15 @@ The language supports arrays as well as register variables.  Arrays
 are implemented using on-chip block RAMs.  This means they tend to be
 small, and hence quick to copy.  Read-only arrays are implemented as
 block RAMs that are shared between any number of processors (the
-number can be changed using a compiler option) -- they can quite a bit
-larger than read-write arrays and they don't need to be copied during
-spawning.
+number can be changed using a compiler option) -- they can be quite a
+bit larger than read-write arrays and they don't need to be copied
+during spawning.
 
 So far there are three wildfire applications:
 
   * [N-Queens solver](apps/queens/queens.w)
-  * [Golomb ruler solver](apps/golomb/golomb2.w)
-  * [SAT solver](apps/dpll/dpll.w)
+  * [Golomb ruler solver](apps/golomb/golomb1.w)
+  * [SAT solver](apps/sat/sat1.w)
 
 Here are the results for an 18-Queens solver on a DE5-NET FPGA:
 
