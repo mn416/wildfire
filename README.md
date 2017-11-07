@@ -67,7 +67,7 @@ So far there are three wildfire applications:
 
   * [N-Queens solver](apps/queens/queens.w)
   * [Golomb ruler solver](apps/golomb/golomb1.w)
-  * [SAT solver](apps/sat/sat1.w)
+  * [SAT solver](apps/sat/sat.w)
 
 Here are the results for an 18-Queens solver on a DE5-NET FPGA:
 

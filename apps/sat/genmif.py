@@ -12,10 +12,9 @@ import sets
 # Parameters
 # =============================================================================
 
-LogMaxVars      = 9
-LogMaxLits      = 12
-LogStackDepth   = 10
-LogMaxClauseLen = 5
+LogMaxVars      = 11
+LogMaxLits      = 14
+LogStackDepth   = 9
 
 # =============================================================================
 # Misc functions
@@ -67,12 +66,14 @@ else:
 # Parse trace
 lits = []
 variables = {}
+numVars = 0
 for line in f:
   if line[0] == "c": continue
   if line[0] == "p": continue
   for word in line.split():
     v = int(word)
     lits.append(v)
+    numVars = max(numVars, abs(v)+1)
     if abs(v) in variables:
       variables[abs(v)] = variables[abs(v)]+1
     else:
@@ -83,7 +84,7 @@ for line in f:
 # =============================================================================
 
 # Check number of variables
-if len(variables) >= 2**LogMaxVars:
+if numVars >= 2**LogMaxVars:
   abort("Max variables exceeded")
 
 # Split into clauses
@@ -95,15 +96,10 @@ while True:
   lits = lits[n+1:]
 numClauses = len(clauses)
 
-# Check clause sizes
-for cs in clauses:
-  if len(cs) >= 2**LogMaxClauseLen:
-    abort("Max clause length exceeded")
-
 # Check number of literals
 lits = [lit for clause in clauses for lit in clause]
 numLits = len(lits)
-if numLits >= 2**LogMaxLits:
+if numLits >= (2**LogMaxLits)-1:
   abort("Max literals exceeded")
 
 # Determine index of each clause
@@ -113,14 +109,14 @@ for clause in clauses:
   clauseIds.append(clauseId)
   clauseId = clauseId + len(clause)
 
-# Find index of clause containg next occurence of variable
+# Find index of clause containing next occurence of variable
 def findNext(i, v):
-  j = (i+1) % numClauses
-  while True:
-    for lit in clauses[j]:
+  while i < numClauses:
+    for lit in clauses[i]:
       if abs(lit) == v:
-        return j
-    j = (j+1) % numClauses
+        return clauseIds[i]
+    i = i+1
+  return (2**LogMaxLits)-1
 
 # For each literal, determine literal index of clause
 # containing next occurence of that variable
@@ -128,9 +124,9 @@ nextClause = []
 for i in range(0, numClauses):
   nextClause.append([])
   for lit in clauses[i]:
-    nextClause[i].append(clauseIds[findNext(i, abs(lit))])
+    nextClause[i].append(findNext(i+1, abs(lit)))
 
-# Encode
+# Encode lits.mif
 lits = []
 for i in range(0, numClauses):
   finalClause = i+1 == numClauses
@@ -138,7 +134,7 @@ for i in range(0, numClauses):
   for j in range(0, n):
     endOfClause = 1 if j+1 == n else 0
     finalLit = 1 if finalClause and endOfClause else 0
-    lit = clauses[i][j] < 0
+    lit = 1 if clauses[i][j] < 0 else 0
     lit = lit | (abs(clauses[i][j]) << 1)
     lit = lit | (nextClause[i][j] << (1+LogMaxVars))
     lit = lit | (endOfClause << (1+LogMaxVars+LogMaxLits))
@@ -146,3 +142,21 @@ for i in range(0, numClauses):
     lits.append(lit)
 
 emitMIF("lits.mif", 2**LogMaxLits, 3+LogMaxVars+LogMaxLits, lits)
+
+# Encode first.mif
+first = []
+for v in range(0, numVars):
+  first.append(findNext(0, v))
+
+emitMIF("first.mif", 2**LogMaxVars, LogMaxLits, first)
+
+# Encode vars.mif
+vas = [1]
+for v in range(1, numVars):
+  if v in variables:
+    vas.append(0)
+  else:
+    vas.append(1)
+vas.append(3)
+
+emitMIF("vars.mif", 2**LogMaxVars, 2, vas)

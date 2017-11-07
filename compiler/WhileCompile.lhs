@@ -556,16 +556,10 @@ barring different instances of variable names.)
 
 > trProg :: Int -> [Int] -> Prog -> P.Prog
 > trProg i neighbours p =
->   P.Prog { P.opts  = Map.fromList newOpts
+>   P.Prog { P.opts  = Map.empty
 >          , P.decls = trDecls (decls p)
 >          , P.code  = snd $ runFresh (trCode (code p)) "_v" 0 }
 >   where
->     newOpts :: [(String, Integer)]
->     newOpts =
->       [ ("RomPortsPerBlockRamPort",
->             Map.findWithDefault 4 "ProcessorsPerROM" (opts p) `div` 2)
->       ]
->
 >     trCode :: Stm -> Fresh P.Stm
 >     trCode s =
 >       do s' <- trStm (s :> Halt)
@@ -841,10 +835,17 @@ program p.  (Node ids must lie in range [0..n-1] where n is the number
 of nodes.)
 
 > translate :: Network -> Prog -> P.Prog
-> translate network p = P.Prog Map.empty ds c
+> translate network p = P.Prog newOpts ds c
 >   where
 >     -- Number of processors
 >     n  = size network
+>
+>     -- Options
+>     newOpts :: Map String Integer
+>     newOpts = Map.fromList
+>       [ ("RomPortsPerBlockRamPort",
+>             Map.findWithDefault 4 "ProcessorsPerROM" (opts p) `div` 2)
+>       ]
 >
 >     -- Code for each processor
 >     ps = [ trProg i (network!i) p | i <- [0..n-1] ]
@@ -1032,7 +1033,7 @@ Top-level compiler
 >           -- translate (torus 23 23)
 >           --translate (wavefly 4 5)
 >           translate (wavefly 5 8)
->           --translate (torus 3 3)
+>           --translate (wavefly 5 10)
 >         . annotateLive
 >         . typeCheck
 >         . arrayAnalysis
