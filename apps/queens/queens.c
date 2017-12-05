@@ -19,7 +19,7 @@ void search(int poss, int left, int down, int right)
 
 int main(void)
 {
-  N = 16;
+  N = 18;
   MASK = (1<<N) - 1;
   COUNT = 0;
   search(MASK, 0, 0, 0);

@@ -4,7 +4,7 @@
 
 -- Search for ruler with NumMarks and MaxLength
 const NumMarks  = 14
-const MaxLength = 127
+const MaxLength = 126
 
 -- Num bits needed to represent ruler
 const N = MaxLength+1
