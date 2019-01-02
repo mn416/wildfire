@@ -53,7 +53,7 @@ backtracking, *s2*.
 There are two properties of the implementation that make this
 efficient: (1) determining an idle neighbour is a single-cycle
 operation; (2) copying a processor's state to a neighbouring processor
-is optimised.
+is optimised using wide inter-processor channels.
 
 The language supports arrays as well as register variables.  Arrays
 are implemented using on-chip block RAMs.  This means they tend to be
@@ -81,4 +81,6 @@ Here are the results for an 18-Queens solver on a DE5-NET FPGA:
   Runtime      | 9.7s
 
 A C++ version of the program running on a 2.6GHz Intel Core i7-6770HQ
-takes 548s. (But didn't parallelise well using GCC Cilk.)
+takes 548s. (But didn't parallelise well using GCC Cilk.)  Further
+resilts are available in a paper that we will make available here
+shortly.
