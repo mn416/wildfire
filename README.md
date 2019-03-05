@@ -69,18 +69,5 @@ So far there are three wildfire applications:
   * [Golomb ruler solver](apps/golomb/golomb1.w)
   * [SAT solver](apps/sat/sat.w)
 
-Here are the results for an 18-Queens solver on a DE5-NET FPGA:
-
-  Metric       | Value
-  ------------ | ------------------
-  Processors   | 512
-  Topology     | 64x8 butterfly
-  Frequency    | 200MHz
-  Logic (ALMs) | 157K (67%)
-  BRAMs        | 9.4Mbit (18%)
-  Runtime      | 9.7s
-
-A C++ version of the program running on a 2.6GHz Intel Core i7-6770HQ
-takes 548s. (But didn't parallelise well using GCC Cilk.)  Further
-resilts are available in a paper that we will make available here
-shortly.
+For further details and performance results, please see this
+[unpublished report](wildfire.pdf).
